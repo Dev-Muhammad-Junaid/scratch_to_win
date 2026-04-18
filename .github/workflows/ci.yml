@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Package — pub get
+        run: flutter pub get
+
+      - name: Package — analyze
+        run: flutter analyze
+
+      - name: Package — test
+        run: flutter test
+
+      - name: Example — pub get
+        working-directory: example
+        run: flutter pub get
+
+      - name: Example — analyze
+        working-directory: example
+        run: flutter analyze
