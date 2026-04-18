@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:scratch_to_win/scratch_to_win.dart';
 
@@ -48,6 +50,11 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
   // --- Completion ---
   bool _playConfettiOnThreshold = true;
   double _confettiParticles = 24;
+  double _confettiDurationSec = 4;
+  double _confettiMinW = 20;
+  double _confettiMinH = 10;
+  double _confettiMaxW = 30;
+  double _confettiMaxH = 15;
 
   bool _playSoundOnCompletion = false;
   final TextEditingController _completionSoundAsset = TextEditingController();
@@ -126,6 +133,11 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
       _hapticFeedbackOnThreshold = true;
       _playConfettiOnThreshold = true;
       _confettiParticles = 24;
+      _confettiDurationSec = 4;
+      _confettiMinW = 20;
+      _confettiMinH = 10;
+      _confettiMaxW = 30;
+      _confettiMaxH = 15;
       _playSoundOnCompletion = false;
       _completionSoundAsset.clear();
       _completionSoundUrl.clear();
@@ -277,12 +289,23 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                   enabled: _scratchEnabled,
                   playConfettiOnThreshold: _playConfettiOnThreshold,
                   confettiParticleCount: _confettiParticles.round().clamp(1, 120),
+                  confettiDuration: Duration(
+                    milliseconds: (_confettiDurationSec * 1000).round().clamp(200, 120000),
+                  ),
+                  confettiMinChipSize: Size(
+                    math.min(_confettiMinW, _confettiMaxW),
+                    math.min(_confettiMinH, _confettiMaxH),
+                  ),
+                  confettiMaxChipSize: Size(
+                    math.max(_confettiMinW, _confettiMaxW),
+                    math.max(_confettiMinH, _confettiMaxH),
+                  ),
                   playSoundOnCompletion: _playSoundOnCompletion,
                   completionSoundAsset: _nullableAsset(_completionSoundAsset.text),
                   completionSoundUrl: _nullableUrl(_completionSoundUrl.text),
                   showRevealAssistButton: _showRevealAssistButton,
                   revealAssistButtonLabel: _revealAssistLabel.text.trim().isEmpty
-                      ? 'Reveal'
+                      ? ''
                       : _revealAssistLabel.text.trim(),
                   revealAssistPadding: EdgeInsets.only(
                     left: _assistPadLeft,
@@ -545,6 +568,45 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                       (v) => setState(() => _confettiParticles = v),
                       valueLabel: (v) => v.round().toString(),
                     ),
+                    _sliderTile(
+                      'Confetti duration (s)',
+                      _confettiDurationSec,
+                      0.5,
+                      12,
+                      (v) => setState(() => _confettiDurationSec = v),
+                    ),
+                    _sliderTile(
+                      'Confetti min chip width',
+                      _confettiMinW,
+                      4,
+                      48,
+                      (v) => setState(() => _confettiMinW = v),
+                      valueLabel: (v) => v.round().toString(),
+                    ),
+                    _sliderTile(
+                      'Confetti min chip height',
+                      _confettiMinH,
+                      2,
+                      32,
+                      (v) => setState(() => _confettiMinH = v),
+                      valueLabel: (v) => v.round().toString(),
+                    ),
+                    _sliderTile(
+                      'Confetti max chip width',
+                      _confettiMaxW,
+                      8,
+                      56,
+                      (v) => setState(() => _confettiMaxW = v),
+                      valueLabel: (v) => v.round().toString(),
+                    ),
+                    _sliderTile(
+                      'Confetti max chip height',
+                      _confettiMaxH,
+                      4,
+                      40,
+                      (v) => setState(() => _confettiMaxH = v),
+                      valueLabel: (v) => v.round().toString(),
+                    ),
                     const Divider(),
                     SwitchListTile(
                       title: const Text('Play completion sound'),
@@ -577,13 +639,16 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                   children: [
                     SwitchListTile(
                       title: const Text('Show assist button'),
+                      subtitle: const Text(
+                        'Turn off to hide. If on, clear the label below to hide while keeping the switch on.',
+                      ),
                       value: _showRevealAssistButton,
                       onChanged: (v) => setState(() => _showRevealAssistButton = v),
                     ),
                     TextField(
                       controller: _revealAssistLabel,
                       decoration: const InputDecoration(
-                        labelText: 'Button label',
+                        labelText: 'Button label (empty = hidden)',
                         border: OutlineInputBorder(),
                       ),
                       onChanged: (_) => setState(() {}),

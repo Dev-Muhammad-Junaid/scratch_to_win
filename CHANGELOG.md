@@ -1,3 +1,9 @@
+## 0.2.2
+
+* **Confetti:** Added `confettiDuration` (default **4s**, matching the old controller), `confettiMinChipSize` / `confettiMaxChipSize` (defaults **20×10** … **30×15**, matching legacy confetti widget chip bounds).
+* **Brush:** Texture stamps are clipped to a **circle** so the scratch tip no longer looks square when using `brushTexture`.
+* **Reveal assist:** `revealAssistButtonLabel` is now `String?`; empty string hides the button even when `showRevealAssistButton` is true (null still defaults the label to `Reveal`).
+
 ## 0.2.1
 
 * Replaced the `confetti` package with a **built-in celebration overlay** so particles spawn across the **full width** of the card (rain from above + sparkle in the upper area) instead of clustering from one corner.

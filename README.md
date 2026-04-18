@@ -9,7 +9,7 @@ Flutter widget: a scratch-off layer on top of any child. Drag to reveal what is 
 
 ```yaml
 dependencies:
-  scratch_to_win: ^0.2.1
+  scratch_to_win: ^0.2.2
 ```
 
 *(Not yet on pub.dev — use a [git dependency](https://dart.dev/tools/pub/dependencies#git-packages) until you publish.)*
@@ -33,8 +33,8 @@ ScratchToWin(
 | Progress | `trackRevealProgress`, `progressGridResolution` (see class docs), `revealThreshold` |
 | Control | `ScratchToWinController.reset()`, `revealAll()`, `enabled` |
 | Surface | `overlayColor`, `overlayGradient`, `overlayImage`, `overlayImageFit`, `borderRadius` |
-| Completion | `playConfettiOnThreshold`, `confettiParticleCount`; `playSoundOnCompletion` + `completionSoundAsset` or `completionSoundUrl` |
-| Accessibility | `showRevealAssistButton`, `revealAssistButtonLabel`, `revealAssistPadding` |
+| Completion | `playConfettiOnThreshold`, `confettiParticleCount`, `confettiDuration`, `confettiMinChipSize`, `confettiMaxChipSize`; optional sound |
+| Accessibility | `showRevealAssistButton`, `revealAssistButtonLabel` (`''` hides if switch on), `revealAssistPadding` |
 
 Pure Flutter drawing for the scratch layer; built-in full-card confetti (no extra package). Optional [`audioplayers`](https://pub.dev/packages/audioplayers) for completion SFX. Optional haptics on start and when the threshold is crossed.
 

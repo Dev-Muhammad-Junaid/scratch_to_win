@@ -115,13 +115,20 @@ class ScratchPainter extends CustomPainter {
   }
 
   void _drawBrushStamp(Canvas canvas, ui.Image? tex, Rect dst) {
+    final center = dst.center;
+    final radius = dst.shortestSide / 2;
+
     if (tex != null) {
+      canvas.save();
+      final clip = Path()..addOval(Rect.fromCircle(center: center, radius: radius));
+      canvas.clipPath(clip);
       final src = Rect.fromLTWH(0, 0, tex.width.toDouble(), tex.height.toDouble());
       final paint = Paint()..blendMode = BlendMode.dstOut;
       canvas.drawImageRect(tex, src, dst, paint);
+      canvas.restore();
     } else {
       final paint = Paint()..blendMode = BlendMode.clear;
-      canvas.drawOval(dst, paint);
+      canvas.drawCircle(center, radius, paint);
     }
   }
 

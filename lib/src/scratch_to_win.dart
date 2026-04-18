@@ -57,11 +57,14 @@ class ScratchToWin extends StatefulWidget {
     this.enabled = true,
     this.playConfettiOnThreshold = false,
     this.confettiParticleCount = 24,
+    this.confettiDuration = const Duration(seconds: 4),
+    this.confettiMinChipSize = const Size(20, 10),
+    this.confettiMaxChipSize = const Size(30, 15),
     this.playSoundOnCompletion = false,
     this.completionSoundAsset,
     this.completionSoundUrl,
     this.showRevealAssistButton = false,
-    this.revealAssistButtonLabel = 'Reveal',
+    this.revealAssistButtonLabel,
     this.revealAssistPadding = const EdgeInsets.only(bottom: 12),
     this.onScratchStart,
     this.onScratchUpdate,
@@ -123,6 +126,15 @@ class ScratchToWin extends StatefulWidget {
   /// Number of confetti chips (density).
   final int confettiParticleCount;
 
+  /// How long the confetti overlay runs (previous [ConfettiController] used 4s).
+  final Duration confettiDuration;
+
+  /// Lower bound for chip size (legacy [ConfettiWidget] default).
+  final Size confettiMinChipSize;
+
+  /// Upper bound for chip size (legacy [ConfettiWidget] default).
+  final Size confettiMaxChipSize;
+
   /// Plays [completionSoundAsset] or [completionSoundUrl] when completed once.
   final bool playSoundOnCompletion;
 
@@ -132,11 +144,13 @@ class ScratchToWin extends StatefulWidget {
   /// Optional remote sound (played via [UrlSource]).
   final String? completionSoundUrl;
 
-  /// Shows a “Reveal” control for accessibility / impatient users.
+  /// When true, shows the assist control if [revealAssistButtonLabel] resolves to a
+  /// non-empty string (see below). When false, the button is never shown.
   final bool showRevealAssistButton;
 
-  /// Label for the assist control.
-  final String revealAssistButtonLabel;
+  /// Assist button text. If null, defaults to `"Reveal"` when visible. If non-null
+  /// and empty after trimming, the button is **hidden** even when [showRevealAssistButton] is true.
+  final String? revealAssistButtonLabel;
 
   /// Insets for the assist button (relative to the stack).
   final EdgeInsets revealAssistPadding;
@@ -212,9 +226,28 @@ class _ScratchToWinState extends State<ScratchToWin> {
 
   AudioPlayer? _audioPlayer;
 
+  /// Effective assist label (defaults to `Reveal` when [ScratchToWin.revealAssistButtonLabel] is null).
+  String get _revealAssistEffectiveLabel =>
+      (widget.revealAssistButtonLabel ?? 'Reveal').trim();
+
+  /// The assist button is shown only when [ScratchToWin.showRevealAssistButton] is true
+  /// and the effective label is non-empty (set label to `''` to keep the flag on but hide).
+  bool get _shouldShowRevealAssistButton =>
+      widget.showRevealAssistButton && _revealAssistEffectiveLabel.isNotEmpty;
+
   @override
   void initState() {
     super.initState();
+    assert(() {
+      final d = widget.confettiDuration;
+      final mn = widget.confettiMinChipSize;
+      final mx = widget.confettiMaxChipSize;
+      assert(d.inMilliseconds > 0);
+      assert(mn.width > 0 && mn.height > 0);
+      assert(mx.width > 0 && mx.height > 0);
+      assert(mn.width <= mx.width && mn.height <= mx.height);
+      return true;
+    }());
     widget.controller?._state = this;
     _grid = _freshGrid();
     if (widget.playSoundOnCompletion &&
@@ -629,6 +662,9 @@ class _ScratchToWinState extends State<ScratchToWin> {
                     key: ValueKey<int>(_celebrationSession),
                     areaSize: size,
                     particleCount: widget.confettiParticleCount,
+                    confettiDuration: widget.confettiDuration,
+                    confettiMinChipSize: widget.confettiMinChipSize,
+                    confettiMaxChipSize: widget.confettiMaxChipSize,
                     onEnded: () {
                       if (mounted) {
                         setState(() => _celebrationVisible = false);
@@ -637,7 +673,7 @@ class _ScratchToWinState extends State<ScratchToWin> {
                   ),
                 ),
               ),
-            if (widget.showRevealAssistButton)
+            if (_shouldShowRevealAssistButton)
               Positioned(
                 left: 0,
                 right: 0,
@@ -647,10 +683,10 @@ class _ScratchToWinState extends State<ScratchToWin> {
                   child: Center(
                     child: Semantics(
                       button: true,
-                      label: widget.revealAssistButtonLabel,
+                      label: _revealAssistEffectiveLabel,
                       child: FilledButton.tonal(
                         onPressed: _fullyRevealed ? null : _revealAll,
-                        child: Text(widget.revealAssistButtonLabel),
+                        child: Text(_revealAssistEffectiveLabel),
                       ),
                     ),
                   ),
