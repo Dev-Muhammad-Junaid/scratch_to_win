@@ -5,13 +5,15 @@
 [![pub package](https://img.shields.io/pub/v/scratch_to_win.svg)](https://pub.dev/packages/scratch_to_win)
 [![style: flutter lints](https://img.shields.io/badge/style-flutter__lints-blue.svg)](https://pub.dev/packages/flutter_lints)
 
+*CI / Pages badges reflect the latest GitHub Actions run; if they look wrong on pub.dev, wait a few minutes and hard-refresh — image caches can lag.*
+
 Flutter widget: a scratch-off layer on top of any child. Drag to reveal what is underneath. Pointer lifecycle callbacks and an optional grid-based estimate of cleared area (for thresholds and win logic).
 
 ## Install
 
 ```yaml
 dependencies:
-  scratch_to_win: ^0.2.3
+  scratch_to_win: ^0.2.4
 ```
 
 ## Try the interactive example

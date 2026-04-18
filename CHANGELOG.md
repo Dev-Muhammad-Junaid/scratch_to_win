@@ -1,3 +1,7 @@
+## 0.2.4
+
+* README: short note that GitHub Actions badges (and pub.dev’s copy of images) can lag behind a few minutes after CI goes green.
+
 ## 0.2.3
 
 * **CI:** Removed steps for `simple_scratch_test` (directory was never in the repo). Added example `flutter test` and a **web build** smoke step so the interactive lab stays verified on Linux.
