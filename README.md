@@ -57,4 +57,4 @@ Publish checks: `dart pub publish --dry-run`. See [pub.dev scoring](https://pub.
 
 ## License
 
-BSD 3-Clause. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
