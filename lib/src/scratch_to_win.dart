@@ -1,9 +1,11 @@
-import 'dart:math' as math;
+import 'dart:ui' as ui;
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'scratch_brush.dart';
+import 'scratch_celebration_overlay.dart';
+import 'scratch_painter.dart';
 
 /// Details passed to scratch callbacks.
 class ScratchDetails {
@@ -25,84 +27,16 @@ class ScratchDetails {
   final double? estimatedRevealFraction;
 }
 
-/// Paints the scratch layer and clears along the gesture path.
-class _ScratchPainter extends CustomPainter {
-  _ScratchPainter({
-    required this.brushRadius,
-    required this.brushShape,
-    required this.path,
-    required this.dotSamples,
-    required this.overlayColor,
-    required this.overlayGradient,
-    required this.borderRadius,
-  });
-
-  final double brushRadius;
-  final ScratchBrushShape brushShape;
-  final Path path;
-  final List<Offset> dotSamples;
-  final Color? overlayColor;
-  final Gradient? overlayGradient;
-  final BorderRadius borderRadius;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    final rrect = borderRadius.toRRect(rect);
-
-    canvas.saveLayer(rect, Paint());
-
-    final base = Paint();
-    if (overlayGradient != null) {
-      base.shader = overlayGradient!.createShader(rect);
-    } else {
-      base.color = overlayColor ?? const Color(0xFFBDBDBD);
-    }
-    canvas.drawRRect(rrect, base);
-
-    final clear = Paint()..blendMode = BlendMode.clear;
-
-    if (brushShape == ScratchBrushShape.dots) {
-      for (final o in dotSamples) {
-        canvas.drawCircle(o, brushRadius, clear);
-      }
-    } else {
-      clear
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = brushRadius * 2
-        ..strokeCap =
-            brushShape == ScratchBrushShape.square ? StrokeCap.square : StrokeCap.round
-        ..strokeJoin =
-            brushShape == ScratchBrushShape.square ? StrokeJoin.miter : StrokeJoin.round;
-      canvas.drawPath(path, clear);
-    }
-
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _ScratchPainter oldDelegate) {
-    return oldDelegate.path != path ||
-        oldDelegate.dotSamples != dotSamples ||
-        oldDelegate.brushRadius != brushRadius ||
-        oldDelegate.brushShape != brushShape ||
-        oldDelegate.overlayColor != overlayColor ||
-        oldDelegate.overlayGradient != overlayGradient ||
-        oldDelegate.borderRadius != borderRadius;
-  }
-}
-
 /// Hide [child] behind a scratch-off surface; dragging reveals the content.
 ///
-/// Callbacks:
-/// - [onScratchStart] — first pointer down on the layer.
-/// - [onScratchUpdate] — pointer moved (or additional pointers changed).
-/// - [onScratchEnd] — last pointer lifted.
-/// - [onScratchCancel] — pointer cancelled (e.g. system gesture won).
-/// - [onRevealProgress] — when [trackRevealProgress] is true, as the estimated
-///   cleared fraction changes.
-/// - [onThresholdReached] — when estimated cleared fraction reaches
-///   [revealThreshold] (fires once until reset).
+/// **Progress:** The scratch area is split into a grid of
+/// [progressGridResolution] × [progressGridResolution] cells. When the brush
+/// intersects a cell, that cell counts as cleared. [onRevealProgress] reports
+/// **clearedCells / totalCells** — a simple, fast approximation of how much of
+/// the card has been scratched. Higher resolution tracks the brush shape more
+/// closely (smoother progress) but costs a bit more work per pointer event;
+/// **24–32** is a good default for most apps; use **16** on very low-end
+/// devices or **40–48** if you need a tighter estimate for game logic.
 class ScratchToWin extends StatefulWidget {
   /// Creates a scratch-off overlay.
   const ScratchToWin({
@@ -110,15 +44,25 @@ class ScratchToWin extends StatefulWidget {
     required this.child,
     this.overlayColor,
     this.overlayGradient,
+    this.overlayImage,
+    this.overlayImageFit = BoxFit.cover,
     this.borderRadius = BorderRadius.zero,
     this.brushRadius = 22,
-    this.brushShape = ScratchBrushShape.round,
+    this.brushTexture,
     this.revealThreshold = 0.55,
     this.trackRevealProgress = true,
     this.progressGridResolution = 28,
     this.hapticFeedbackOnStart = true,
     this.hapticFeedbackOnThreshold = true,
     this.enabled = true,
+    this.playConfettiOnThreshold = false,
+    this.confettiParticleCount = 24,
+    this.playSoundOnCompletion = false,
+    this.completionSoundAsset,
+    this.completionSoundUrl,
+    this.showRevealAssistButton = false,
+    this.revealAssistButtonLabel = 'Reveal',
+    this.revealAssistPadding = const EdgeInsets.only(bottom: 12),
     this.onScratchStart,
     this.onScratchUpdate,
     this.onScratchEnd,
@@ -127,34 +71,40 @@ class ScratchToWin extends StatefulWidget {
     this.onThresholdReached,
     this.controller,
   }) : assert(revealThreshold > 0 && revealThreshold <= 1),
-       assert(progressGridResolution > 0);
+       assert(progressGridResolution > 0),
+       assert(confettiParticleCount > 0);
 
   /// Widget revealed underneath.
   final Widget child;
 
-  /// Solid scratch color when [overlayGradient] is null.
+  /// Solid scratch color when [overlayGradient] / [overlayImage] are null.
   final Color? overlayColor;
 
-  /// Gradient scratch surface (wins over [overlayColor] when set).
+  /// Gradient scratch surface (ignored if [overlayImage] is set).
   final Gradient? overlayGradient;
+
+  /// Optional image scratched off instead of a solid color / gradient.
+  final ImageProvider? overlayImage;
+
+  /// How [overlayImage] is fitted to the scratch area.
+  final BoxFit overlayImageFit;
 
   /// Border radius of the scratch surface.
   final BorderRadius borderRadius;
 
-  /// Half-width of the scratch stroke (or dot radius for [ScratchBrushShape.dots]).
+  /// Half-width of the round scratch stroke.
   final double brushRadius;
 
-  /// Brush style along the path.
-  final ScratchBrushShape brushShape;
+  /// Optional tile image; opaque pixels remove the overlay ([BlendMode.dstOut]).
+  final ImageProvider? brushTexture;
 
   /// Estimated cleared fraction (0–1) to trigger [onThresholdReached].
   final double revealThreshold;
 
-  /// Whether to maintain a grid to estimate reveal progress and call
-  /// [onRevealProgress] / [onThresholdReached].
+  /// Whether to maintain a grid for progress / threshold.
   final bool trackRevealProgress;
 
-  /// Grid size for progress estimation (higher = smoother estimate, more work).
+  /// See [ScratchToWin] class documentation.
   final int progressGridResolution;
 
   /// Light haptic when scratching starts.
@@ -163,8 +113,33 @@ class ScratchToWin extends StatefulWidget {
   /// Medium haptic when [revealThreshold] is first crossed.
   final bool hapticFeedbackOnThreshold;
 
-  /// When false, gestures are ignored.
+  /// When false, gestures are ignored — the [child] can receive taps.
   final bool enabled;
+
+  /// Confetti when the threshold is reached or [ScratchToWinController.revealAll] runs.
+  /// Fills the card (rain from the top + sparkle in the upper area), then fades.
+  final bool playConfettiOnThreshold;
+
+  /// Number of confetti chips (density).
+  final int confettiParticleCount;
+
+  /// Plays [completionSoundAsset] or [completionSoundUrl] when completed once.
+  final bool playSoundOnCompletion;
+
+  /// Path in the **host app** `assets/` (e.g. `assets/win.mp3`). List it in the app `pubspec.yaml`.
+  final String? completionSoundAsset;
+
+  /// Optional remote sound (played via [UrlSource]).
+  final String? completionSoundUrl;
+
+  /// Shows a “Reveal” control for accessibility / impatient users.
+  final bool showRevealAssistButton;
+
+  /// Label for the assist control.
+  final String revealAssistButtonLabel;
+
+  /// Insets for the assist button (relative to the stack).
+  final EdgeInsets revealAssistPadding;
 
   /// Called when the first pointer touches the scratch area.
   final void Function(ScratchDetails details)? onScratchStart;
@@ -184,43 +159,82 @@ class ScratchToWin extends StatefulWidget {
   /// Called once when estimated cleared fraction reaches [revealThreshold].
   final void Function(double fraction)? onThresholdReached;
 
-  /// Optional controller to programmatically reset the scratch layer.
+  /// Optional controller: [ScratchToWinController.reset], [ScratchToWinController.revealAll].
   final ScratchToWinController? controller;
 
   @override
   State<ScratchToWin> createState() => _ScratchToWinState();
 }
 
-/// Drives [ScratchToWin] from outside the widget tree (e.g. reset the card).
-///
-/// Attach by passing [ScratchToWin.controller]. Each controller should be used
-/// with at most one [ScratchToWin] at a time.
+/// Drives [ScratchToWin] from outside the widget tree.
 class ScratchToWinController {
   _ScratchToWinState? _state;
 
-  /// Clears scratch strokes and progress so the overlay is fully covered again.
+  /// Clears scratch strokes so the overlay is fully covered again.
   void reset() {
-    _state?._reset();
+    _state?._resetScratch();
+  }
+
+  /// Instantly reveals the [child] and triggers completion (same as assist + threshold).
+  void revealAll() {
+    _state?._revealAll();
   }
 }
 
 class _ScratchToWinState extends State<ScratchToWin> {
   final Path _scratchPath = Path();
-  final List<Offset> _dotSamples = <Offset>[];
+
+  /// Drives [ScratchPainter.shouldRepaint] — [Path] is mutated in place, so the
+  /// reference alone does not change when the user scratches.
+  int _scratchPathRevision = 0;
+
+  ui.Image? _resolvedOverlayImage;
+  ui.Image? _resolvedBrushTexture;
+
+  ImageStream? _overlayStream;
+  ImageStreamListener? _overlayListener;
+
+  ImageStream? _brushTextureStream;
+  ImageStreamListener? _brushListener;
+
   int _activePointers = 0;
   bool _thresholdReported = false;
+  bool _completionEffectsDone = false;
+  bool _fullyRevealed = false;
+
   late List<bool> _grid;
   int _gridCleared = 0;
   Size? _lastSize;
+
+  /// Each completion bumps this so a fresh [ScratchCelebrationOverlay] runs.
+  int _celebrationSession = 0;
+  bool _celebrationVisible = false;
+
+  AudioPlayer? _audioPlayer;
 
   @override
   void initState() {
     super.initState();
     widget.controller?._state = this;
-    _grid = List<bool>.filled(
+    _grid = _freshGrid();
+    if (widget.playSoundOnCompletion &&
+        (widget.completionSoundAsset != null || widget.completionSoundUrl != null)) {
+      _audioPlayer = AudioPlayer();
+    }
+  }
+
+  List<bool> _freshGrid() {
+    return List<bool>.filled(
       widget.progressGridResolution * widget.progressGridResolution,
       false,
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _attachOverlayImage();
+    _attachBrushTexture();
   }
 
   @override
@@ -230,46 +244,171 @@ class _ScratchToWinState extends State<ScratchToWin> {
       oldWidget.controller?._state = null;
       widget.controller?._state = this;
     }
+    if (oldWidget.overlayImage != widget.overlayImage) {
+      _attachOverlayImage();
+    }
+    if (oldWidget.brushTexture != widget.brushTexture) {
+      _attachBrushTexture();
+    }
     if (oldWidget.progressGridResolution != widget.progressGridResolution) {
-      _grid = List<bool>.filled(
-        widget.progressGridResolution * widget.progressGridResolution,
-        false,
-      );
+      _grid = _freshGrid();
       _gridCleared = 0;
       _lastSize = null;
     }
+    final needPlayer = widget.playSoundOnCompletion &&
+        (widget.completionSoundAsset != null || widget.completionSoundUrl != null);
+    if (needPlayer && _audioPlayer == null) {
+      _audioPlayer = AudioPlayer();
+    } else if (!needPlayer && _audioPlayer != null) {
+      _audioPlayer?.dispose();
+      _audioPlayer = null;
+    }
+  }
+
+  void _attachOverlayImage() {
+    final provider = widget.overlayImage;
+    if (provider == null) {
+      _overlayStream?.removeListener(_overlayListener!);
+      _overlayStream = null;
+      _overlayListener = null;
+      if (_resolvedOverlayImage != null) {
+        setState(() => _resolvedOverlayImage = null);
+      }
+      return;
+    }
+
+    final stream = provider.resolve(createLocalImageConfiguration(context));
+    if (stream == _overlayStream) {
+      return;
+    }
+
+    _overlayStream?.removeListener(_overlayListener!);
+
+    late ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (ImageInfo info, bool _) {
+        if (!mounted) {
+          return;
+        }
+        setState(() => _resolvedOverlayImage = info.image);
+      },
+      onError: (Object error, StackTrace? stackTrace) {
+        if (mounted) {
+          setState(() => _resolvedOverlayImage = null);
+        }
+      },
+    );
+
+    _overlayListener = listener;
+    _overlayStream = stream;
+    stream.addListener(listener);
+  }
+
+  void _attachBrushTexture() {
+    final provider = widget.brushTexture;
+    if (provider == null) {
+      _brushTextureStream?.removeListener(_brushListener!);
+      _brushTextureStream = null;
+      _brushListener = null;
+      if (_resolvedBrushTexture != null) {
+        setState(() => _resolvedBrushTexture = null);
+      }
+      return;
+    }
+
+    final stream = provider.resolve(createLocalImageConfiguration(context));
+    if (stream == _brushTextureStream) {
+      return;
+    }
+
+    _brushTextureStream?.removeListener(_brushListener!);
+
+    late ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (ImageInfo info, bool _) {
+        if (!mounted) {
+          return;
+        }
+        setState(() => _resolvedBrushTexture = info.image);
+      },
+      onError: (Object error, StackTrace? stackTrace) {
+        if (mounted) {
+          setState(() => _resolvedBrushTexture = null);
+        }
+      },
+    );
+
+    _brushListener = listener;
+    _brushTextureStream = stream;
+    stream.addListener(listener);
   }
 
   @override
   void dispose() {
     widget.controller?._state = null;
+    if (_overlayListener != null && _overlayStream != null) {
+      _overlayStream!.removeListener(_overlayListener!);
+    }
+    if (_brushListener != null && _brushTextureStream != null) {
+      _brushTextureStream!.removeListener(_brushListener!);
+    }
+    _audioPlayer?.dispose();
     super.dispose();
   }
 
-  void _reset() {
+  void _resetScratch() {
     setState(() {
       _scratchPath.reset();
-      _dotSamples.clear();
+      _scratchPathRevision++;
       _thresholdReported = false;
+      _completionEffectsDone = false;
+      _fullyRevealed = false;
       _gridCleared = 0;
-      _grid = List<bool>.filled(
-        widget.progressGridResolution * widget.progressGridResolution,
-        false,
-      );
+      _grid = _freshGrid();
+      _celebrationVisible = false;
     });
   }
 
+  void _revealAll() {
+    if (_fullyRevealed) {
+      return;
+    }
+    final hadThreshold = _thresholdReported;
+    setState(() {
+      _fullyRevealed = true;
+      _thresholdReported = true;
+      if (widget.trackRevealProgress) {
+        _gridCleared = _grid.length;
+        for (var i = 0; i < _grid.length; i++) {
+          _grid[i] = true;
+        }
+      }
+    });
+    widget.onRevealProgress?.call(1.0);
+    if (!hadThreshold) {
+      widget.onThresholdReached?.call(1.0);
+    }
+    _runCompletionEffects();
+  }
+
   double _fraction() {
-    if (!widget.trackRevealProgress) return 0;
+    if (!widget.trackRevealProgress) {
+      return 0;
+    }
+    if (_fullyRevealed) {
+      return 1.0;
+    }
     return _gridCleared / _grid.length;
   }
 
-  void _markGrid(Offset local, Size size) {
-    if (!widget.trackRevealProgress) return;
+  void _markGrid(Offset local, Size size, double radius) {
+    if (!widget.trackRevealProgress) {
+      return;
+    }
     final n = widget.progressGridResolution;
     final cellW = size.width / n;
     final cellH = size.height / n;
-    final r = widget.brushRadius;
+    final r = radius;
     final minCx = ((local.dx - r) / cellW).floor().clamp(0, n - 1);
     final maxCx = ((local.dx + r) / cellW).ceil().clamp(0, n - 1);
     final minCy = ((local.dy - r) / cellH).floor().clamp(0, n - 1);
@@ -277,7 +416,9 @@ class _ScratchToWinState extends State<ScratchToWin> {
     for (var cy = minCy; cy <= maxCy; cy++) {
       for (var cx = minCx; cx <= maxCx; cx++) {
         final idx = cy * n + cx;
-        if (_grid[idx]) continue;
+        if (_grid[idx]) {
+          continue;
+        }
         final cellRect = Rect.fromLTWH(cx * cellW, cy * cellH, cellW, cellH);
         if (_circleIntersectsRect(local, r, cellRect)) {
           _grid[idx] = true;
@@ -296,7 +437,9 @@ class _ScratchToWinState extends State<ScratchToWin> {
   }
 
   void _emitProgress() {
-    if (!widget.trackRevealProgress) return;
+    if (!widget.trackRevealProgress) {
+      return;
+    }
     final f = _fraction();
     widget.onRevealProgress?.call(f);
     if (!_thresholdReported && f >= widget.revealThreshold) {
@@ -305,6 +448,33 @@ class _ScratchToWinState extends State<ScratchToWin> {
         HapticFeedback.mediumImpact();
       }
       widget.onThresholdReached?.call(f);
+      _runCompletionEffects();
+    }
+  }
+
+  Future<void> _runCompletionEffects() async {
+    if (_completionEffectsDone || !mounted) {
+      return;
+    }
+    _completionEffectsDone = true;
+
+    if (widget.playConfettiOnThreshold) {
+      setState(() {
+        _celebrationSession++;
+        _celebrationVisible = true;
+      });
+    }
+
+    if (widget.playSoundOnCompletion && _audioPlayer != null) {
+      try {
+        if (widget.completionSoundUrl != null) {
+          await _audioPlayer!.play(UrlSource(widget.completionSoundUrl!));
+        } else if (widget.completionSoundAsset != null) {
+          await _audioPlayer!.play(AssetSource(widget.completionSoundAsset!));
+        }
+      } catch (_) {
+        // Missing asset or network — ignore so the widget still works.
+      }
     }
   }
 
@@ -316,24 +486,33 @@ class _ScratchToWinState extends State<ScratchToWin> {
     );
   }
 
+  void _appendStrokePoint(Offset local) {
+    if (_fullyRevealed) {
+      return;
+    }
+    _scratchPath.lineTo(local.dx, local.dy);
+    _scratchPathRevision++;
+    _markGrid(local, _lastSize ?? Size.zero, widget.brushRadius);
+  }
+
   void _handlePointerDown(PointerDownEvent e) {
-    if (!widget.enabled) return;
+    if (!widget.enabled || _fullyRevealed) {
+      return;
+    }
     _activePointers++;
     if (_activePointers == 1) {
       if (widget.hapticFeedbackOnStart) {
         HapticFeedback.selectionClick();
       }
       final local = e.localPosition;
-      if (widget.brushShape == ScratchBrushShape.dots) {
-        _dotSamples.add(local);
-      } else {
-        _scratchPath.moveTo(local.dx, local.dy);
-      }
+      _scratchPath.moveTo(local.dx, local.dy);
+      _scratchPathRevision++;
+
       final box = context.findRenderObject() as RenderBox?;
       final size = box?.size;
       if (size != null) {
         _lastSize = size;
-        _markGrid(local, size);
+        _markGrid(local, size, widget.brushRadius);
       }
       widget.onScratchStart?.call(_details(local));
       _emitProgress();
@@ -342,18 +521,16 @@ class _ScratchToWinState extends State<ScratchToWin> {
   }
 
   void _handlePointerMove(PointerMoveEvent e) {
-    if (!widget.enabled || _activePointers == 0) return;
-    final local = e.localPosition;
-    if (widget.brushShape == ScratchBrushShape.dots) {
-      _dotSamples.add(local);
-    } else {
-      _scratchPath.lineTo(local.dx, local.dy);
+    if (!widget.enabled || _activePointers == 0 || _fullyRevealed) {
+      return;
     }
+    final local = e.localPosition;
+    _appendStrokePoint(local);
+
     final box = context.findRenderObject() as RenderBox?;
     final size = box?.size;
     if (size != null) {
       _lastSize = size;
-      _markGrid(local, size);
     }
     widget.onScratchUpdate?.call(_details(local));
     _emitProgress();
@@ -361,8 +538,10 @@ class _ScratchToWinState extends State<ScratchToWin> {
   }
 
   void _handlePointerUp(PointerUpEvent e) {
-    if (_activePointers == 0) return;
-    _activePointers = math.max(0, _activePointers - 1);
+    if (_activePointers == 0) {
+      return;
+    }
+    _activePointers--;
     final local = e.localPosition;
     if (_activePointers == 0) {
       widget.onScratchEnd?.call(_details(local));
@@ -371,8 +550,10 @@ class _ScratchToWinState extends State<ScratchToWin> {
   }
 
   void _handlePointerCancel(PointerCancelEvent e) {
-    if (_activePointers == 0) return;
-    _activePointers = math.max(0, _activePointers - 1);
+    if (_activePointers == 0) {
+      return;
+    }
+    _activePointers--;
     final local = e.localPosition;
     widget.onScratchCancel?.call(_details(local));
     setState(() {});
@@ -392,6 +573,9 @@ class _ScratchToWinState extends State<ScratchToWin> {
           ],
         );
 
+    final effectiveGradient =
+        widget.overlayGradient ?? (widget.overlayColor == null ? gradient : null);
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(
@@ -401,9 +585,6 @@ class _ScratchToWinState extends State<ScratchToWin> {
         if (_lastSize != size && size.width > 0 && size.height > 0) {
           _lastSize = size;
         }
-
-        final effectiveGradient =
-            widget.overlayGradient ?? (widget.overlayColor == null ? gradient : null);
 
         return Stack(
           clipBehavior: Clip.none,
@@ -422,20 +603,59 @@ class _ScratchToWinState extends State<ScratchToWin> {
                   child: RepaintBoundary(
                     child: CustomPaint(
                       size: size,
-                      painter: _ScratchPainter(
-                        brushRadius: widget.brushRadius,
-                        brushShape: widget.brushShape,
-                        path: _scratchPath,
-                        dotSamples: List<Offset>.from(_dotSamples),
-                        overlayColor: widget.overlayColor,
-                        overlayGradient: effectiveGradient,
+                      painter: ScratchPainter(
                         borderRadius: widget.borderRadius,
+                        path: _scratchPath,
+                        scratchPathRevision: _scratchPathRevision,
+                        brushRadius: widget.brushRadius,
+                        overlayColor: widget.overlayImage != null ? null : widget.overlayColor,
+                        overlayGradient: widget.overlayImage != null ? null : effectiveGradient,
+                        overlayImage: _resolvedOverlayImage,
+                        overlayImageFit: widget.overlayImageFit,
+                        brushTextureImage: _resolvedBrushTexture,
+                        brushTextureLoading:
+                            widget.brushTexture != null && _resolvedBrushTexture == null,
+                        fullyRevealed: _fullyRevealed,
                       ),
                     ),
                   ),
                 ),
               ),
             ),
+            if (widget.playConfettiOnThreshold && _celebrationVisible)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: ScratchCelebrationOverlay(
+                    key: ValueKey<int>(_celebrationSession),
+                    areaSize: size,
+                    particleCount: widget.confettiParticleCount,
+                    onEnded: () {
+                      if (mounted) {
+                        setState(() => _celebrationVisible = false);
+                      }
+                    },
+                  ),
+                ),
+              ),
+            if (widget.showRevealAssistButton)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Padding(
+                  padding: widget.revealAssistPadding,
+                  child: Center(
+                    child: Semantics(
+                      button: true,
+                      label: widget.revealAssistButtonLabel,
+                      child: FilledButton.tonal(
+                        onPressed: _fullyRevealed ? null : _revealAll,
+                        child: Text(widget.revealAssistButtonLabel),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         );
       },

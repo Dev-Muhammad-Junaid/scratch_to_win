@@ -39,3 +39,15 @@ jobs:
       - name: Example — analyze
         working-directory: example
         run: flutter analyze
+
+      - name: Simple test app — pub get
+        working-directory: simple_scratch_test
+        run: flutter pub get
+
+      - name: Simple test app — analyze
+        working-directory: simple_scratch_test
+        run: flutter analyze
+
+      - name: Simple test app — test
+        working-directory: simple_scratch_test
+        run: flutter test

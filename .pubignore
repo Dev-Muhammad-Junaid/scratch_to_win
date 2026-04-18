@@ -1,0 +1,5 @@
+# Local test harness — not part of the published package
+simple_scratch_test/
+
+build/
+*.iml

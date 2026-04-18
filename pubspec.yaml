@@ -1,6 +1,6 @@
 name: scratch_to_win
 description: "Scratchable overlay to reveal hidden widgets with gestures and callbacks."
-version: 0.0.1
+version: 0.2.1
 homepage: https://github.com/Dev-Muhammad-Junaid/scratch_to_win
 repository: https://github.com/Dev-Muhammad-Junaid/scratch_to_win
 issue_tracker: https://github.com/Dev-Muhammad-Junaid/scratch_to_win/issues
@@ -12,6 +12,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  audioplayers: ^6.6.0
 
 dev_dependencies:
   flutter_test:
