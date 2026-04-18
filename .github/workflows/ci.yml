@@ -40,14 +40,10 @@ jobs:
         working-directory: example
         run: flutter analyze
 
-      - name: Simple test app — pub get
-        working-directory: simple_scratch_test
-        run: flutter pub get
-
-      - name: Simple test app — analyze
-        working-directory: simple_scratch_test
-        run: flutter analyze
-
-      - name: Simple test app — test
-        working-directory: simple_scratch_test
+      - name: Example — test
+        working-directory: example
         run: flutter test
+
+      - name: Example — web build (verify)
+        working-directory: example
+        run: flutter build web --release --base-href /scratch_to_win/

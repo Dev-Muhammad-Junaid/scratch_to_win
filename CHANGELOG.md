@@ -1,3 +1,9 @@
+## 0.2.3
+
+* **CI:** Removed steps for `simple_scratch_test` (directory was never in the repo). Added example `flutter test` and a **web build** smoke step so the interactive lab stays verified on Linux.
+* **Docs:** README notes on pub.dev, the bundled `example/` lab, and the GitHub Pages live demo.
+* **GitHub Actions:** New **Deploy example (web)** workflow publishing the example app to GitHub Pages (enable Pages with the “GitHub Actions” source).
+
 ## 0.2.2
 
 * **Confetti:** Added `confettiDuration` (default **4s**, matching the old controller), `confettiMinChipSize` / `confettiMaxChipSize` (defaults **20×10** … **30×15**, matching legacy confetti widget chip bounds).

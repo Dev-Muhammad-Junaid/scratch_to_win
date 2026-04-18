@@ -1,6 +1,8 @@
 # scratch_to_win
 
 [![CI](https://github.com/Dev-Muhammad-Junaid/scratch_to_win/actions/workflows/ci.yml/badge.svg)](https://github.com/Dev-Muhammad-Junaid/scratch_to_win/actions/workflows/ci.yml)
+[![Pages](https://github.com/Dev-Muhammad-Junaid/scratch_to_win/actions/workflows/deploy_example_web.yml/badge.svg)](https://github.com/Dev-Muhammad-Junaid/scratch_to_win/actions/workflows/deploy_example_web.yml)
+[![pub package](https://img.shields.io/pub/v/scratch_to_win.svg)](https://pub.dev/packages/scratch_to_win)
 [![style: flutter lints](https://img.shields.io/badge/style-flutter__lints-blue.svg)](https://pub.dev/packages/flutter_lints)
 
 Flutter widget: a scratch-off layer on top of any child. Drag to reveal what is underneath. Pointer lifecycle callbacks and an optional grid-based estimate of cleared area (for thresholds and win logic).
@@ -9,10 +11,14 @@ Flutter widget: a scratch-off layer on top of any child. Drag to reveal what is 
 
 ```yaml
 dependencies:
-  scratch_to_win: ^0.2.2
+  scratch_to_win: ^0.2.3
 ```
 
-*(Not yet on pub.dev — use a [git dependency](https://dart.dev/tools/pub/dependencies#git-packages) until you publish.)*
+## Try the interactive example
+
+- **Live (web):** [GitHub Pages demo](https://dev-muhammad-junaid.github.io/scratch_to_win/) — enable **Settings → Pages → GitHub Actions** in this repo on first use; the **Deploy example (web)** workflow must succeed once.
+- **In the package:** the published tarball includes the [`example/`](example/) Flutter project (interactive “lab” for every API option).
+- On **pub.dev**, open the package’s repository link to browse `example/` online, or use your pub cache after `dart pub get`.
 
 ## Quick start
 
@@ -38,7 +44,7 @@ ScratchToWin(
 
 Pure Flutter drawing for the scratch layer; built-in full-card confetti (no extra package). Optional [`audioplayers`](https://pub.dev/packages/audioplayers) for completion SFX. Optional haptics on start and when the threshold is crossed.
 
-## Example
+## Example (local)
 
 ```bash
 git clone https://github.com/Dev-Muhammad-Junaid/scratch_to_win.git
@@ -46,6 +52,8 @@ cd scratch_to_win/example
 flutter pub get
 flutter run
 ```
+
+See [example/README.md](example/README.md) for the lab app, web build, and pub.dev layout.
 
 ## Development
 

@@ -1,16 +1,29 @@
-# scratch_to_win_example
+# scratch_to_win example — interactive lab
 
-A new Flutter project.
+This app is a **full settings panel** for every public option on [`ScratchToWin`](../lib/src/scratch_to_win.dart): overlay surface, brush, progress, confetti, sound, reveal assist, and callback logging.
 
-## Getting Started
+## Run locally
 
-This project is a starting point for a Flutter application.
+```bash
+cd example
+flutter pub get
+flutter run            # pick a device, or use -d chrome / -d macos
+```
 
-A few resources to get you started if this is your first Flutter project:
+Web:
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+```bash
+flutter run -d chrome
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Live demo (GitHub Pages)
+
+After [GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site#publishing-with-a-custom-github-actions-workflow) is enabled for this repository (**Settings → Pages → GitHub Actions**), the workflow **Deploy example (web)** publishes the same UI:
+
+**https://dev-muhammad-junaid.github.io/scratch_to_win/**
+
+*(Replace the hostname with your own GitHub Pages URL if you fork the repo.)*
+
+## pub.dev
+
+The published package on [pub.dev](https://pub.dev/packages/scratch_to_win) ships this `example/` folder inside the package archive. After you add `scratch_to_win` to a project and run `dart pub get`, you can copy the `example/` tree from your pub cache (…`hosted/pub.dev/scratch_to_win-<version>/example/`) or clone this repository. The pub.dev package page also links to the repository for browsing source online.
