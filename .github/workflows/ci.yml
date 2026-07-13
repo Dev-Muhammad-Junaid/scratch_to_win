@@ -26,8 +26,11 @@ jobs:
       - name: Package — pub get
         run: flutter pub get
 
+      - name: Package — format
+        run: dart format --output=none --set-exit-if-changed .
+
       - name: Package — analyze
-        run: flutter analyze
+        run: flutter analyze --fatal-infos
 
       - name: Package — test
         run: flutter test
@@ -38,7 +41,7 @@ jobs:
 
       - name: Example — analyze
         working-directory: example
-        run: flutter analyze
+        run: flutter analyze --fatal-infos
 
       - name: Example — test
         working-directory: example
@@ -47,3 +50,15 @@ jobs:
       - name: Example — web build (verify)
         working-directory: example
         run: flutter build web --release --base-href /scratch_to_win/
+
+  publish-dry-run:
+    runs-on: ubuntu-latest
+    needs: analyze-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart pub publish --dry-run

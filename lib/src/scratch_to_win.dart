@@ -1,10 +1,11 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'scratch_celebration_overlay.dart';
+import 'scratch_debris_layer.dart';
 import 'scratch_painter.dart';
 
 /// Details passed to scratch callbacks.
@@ -37,6 +38,10 @@ class ScratchDetails {
 /// closely (smoother progress) but costs a bit more work per pointer event;
 /// **24–32** is a good default for most apps; use **16** on very low-end
 /// devices or **40–48** if you need a tighter estimate for game logic.
+///
+/// **Sound:** This package does not depend on an audio plugin (keeps Web/WASM
+/// clean). Pass [onCompletionSound] and play SFX from your app with
+/// `audioplayers`, `just_audio`, or any other player.
 class ScratchToWin extends StatefulWidget {
   /// Creates a scratch-off overlay.
   const ScratchToWin({
@@ -60,9 +65,8 @@ class ScratchToWin extends StatefulWidget {
     this.confettiDuration = const Duration(seconds: 4),
     this.confettiMinChipSize = const Size(20, 10),
     this.confettiMaxChipSize = const Size(30, 15),
-    this.playSoundOnCompletion = false,
-    this.completionSoundAsset,
-    this.completionSoundUrl,
+    this.showScratchDebris = false,
+    this.onCompletionSound,
     this.showRevealAssistButton = false,
     this.revealAssistButtonLabel,
     this.revealAssistPadding = const EdgeInsets.only(bottom: 12),
@@ -73,9 +77,9 @@ class ScratchToWin extends StatefulWidget {
     this.onRevealProgress,
     this.onThresholdReached,
     this.controller,
-  }) : assert(revealThreshold > 0 && revealThreshold <= 1),
-       assert(progressGridResolution > 0),
-       assert(confettiParticleCount > 0);
+  })  : assert(revealThreshold > 0 && revealThreshold <= 1),
+        assert(progressGridResolution > 0),
+        assert(confettiParticleCount > 0);
 
   /// Widget revealed underneath.
   final Widget child;
@@ -135,14 +139,14 @@ class ScratchToWin extends StatefulWidget {
   /// Upper bound for chip size (legacy [ConfettiWidget] default).
   final Size confettiMaxChipSize;
 
-  /// Plays [completionSoundAsset] or [completionSoundUrl] when completed once.
-  final bool playSoundOnCompletion;
+  /// When true, emits falling foil flakes along the brush while scratching.
+  final bool showScratchDebris;
 
-  /// Path in the **host app** `assets/` (e.g. `assets/win.mp3`). List it in the app `pubspec.yaml`.
-  final String? completionSoundAsset;
-
-  /// Optional remote sound (played via [UrlSource]).
-  final String? completionSoundUrl;
+  /// Invoked once when the reveal completes (threshold or [ScratchToWinController.revealAll]).
+  ///
+  /// Use this to play a sound from the host app so this package stays free of
+  /// audio plugins (and WASM-compatible).
+  final Future<void> Function()? onCompletionSound;
 
   /// When true, shows the assist control if [revealAssistButtonLabel] resolves to a
   /// non-empty string (see below). When false, the button is never shown.
@@ -182,16 +186,29 @@ class ScratchToWin extends StatefulWidget {
 
 /// Drives [ScratchToWin] from outside the widget tree.
 class ScratchToWinController {
+  /// Creates a controller for a [ScratchToWin] widget.
+  ScratchToWinController();
+
   _ScratchToWinState? _state;
+
+  /// Latest estimated reveal fraction (0–1). Updates while [ScratchToWin.trackRevealProgress]
+  /// is enabled. Listen with [ValueListenableBuilder] or [Listenable.merge].
+  final ValueNotifier<double> revealProgress = ValueNotifier<double>(0);
 
   /// Clears scratch strokes so the overlay is fully covered again.
   void reset() {
     _state?._resetScratch();
   }
 
-  /// Instantly reveals the [child] and triggers completion (same as assist + threshold).
+  /// Instantly reveals the [ScratchToWin.child] and triggers completion
+  /// (same as assist + threshold).
   void revealAll() {
     _state?._revealAll();
+  }
+
+  /// Releases [revealProgress]. Call when the controller is no longer needed.
+  void dispose() {
+    revealProgress.dispose();
   }
 }
 
@@ -219,12 +236,14 @@ class _ScratchToWinState extends State<ScratchToWin> {
   late List<bool> _grid;
   int _gridCleared = 0;
   Size? _lastSize;
+  Offset? _lastStrokePoint;
 
   /// Each completion bumps this so a fresh [ScratchCelebrationOverlay] runs.
   int _celebrationSession = 0;
   bool _celebrationVisible = false;
 
-  AudioPlayer? _audioPlayer;
+  final GlobalKey<ScratchDebrisLayerState> _debrisKey =
+      GlobalKey<ScratchDebrisLayerState>();
 
   /// Effective assist label (defaults to `Reveal` when [ScratchToWin.revealAssistButtonLabel] is null).
   String get _revealAssistEffectiveLabel =>
@@ -250,10 +269,6 @@ class _ScratchToWinState extends State<ScratchToWin> {
     }());
     widget.controller?._state = this;
     _grid = _freshGrid();
-    if (widget.playSoundOnCompletion &&
-        (widget.completionSoundAsset != null || widget.completionSoundUrl != null)) {
-      _audioPlayer = AudioPlayer();
-    }
   }
 
   List<bool> _freshGrid() {
@@ -276,6 +291,7 @@ class _ScratchToWinState extends State<ScratchToWin> {
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller?._state = null;
       widget.controller?._state = this;
+      widget.controller?.revealProgress.value = _fraction();
     }
     if (oldWidget.overlayImage != widget.overlayImage) {
       _attachOverlayImage();
@@ -288,20 +304,14 @@ class _ScratchToWinState extends State<ScratchToWin> {
       _gridCleared = 0;
       _lastSize = null;
     }
-    final needPlayer = widget.playSoundOnCompletion &&
-        (widget.completionSoundAsset != null || widget.completionSoundUrl != null);
-    if (needPlayer && _audioPlayer == null) {
-      _audioPlayer = AudioPlayer();
-    } else if (!needPlayer && _audioPlayer != null) {
-      _audioPlayer?.dispose();
-      _audioPlayer = null;
-    }
   }
 
   void _attachOverlayImage() {
     final provider = widget.overlayImage;
     if (provider == null) {
-      _overlayStream?.removeListener(_overlayListener!);
+      if (_overlayListener != null && _overlayStream != null) {
+        _overlayStream!.removeListener(_overlayListener!);
+      }
       _overlayStream = null;
       _overlayListener = null;
       if (_resolvedOverlayImage != null) {
@@ -315,7 +325,9 @@ class _ScratchToWinState extends State<ScratchToWin> {
       return;
     }
 
-    _overlayStream?.removeListener(_overlayListener!);
+    if (_overlayListener != null && _overlayStream != null) {
+      _overlayStream!.removeListener(_overlayListener!);
+    }
 
     late ImageStreamListener listener;
     listener = ImageStreamListener(
@@ -340,7 +352,9 @@ class _ScratchToWinState extends State<ScratchToWin> {
   void _attachBrushTexture() {
     final provider = widget.brushTexture;
     if (provider == null) {
-      _brushTextureStream?.removeListener(_brushListener!);
+      if (_brushListener != null && _brushTextureStream != null) {
+        _brushTextureStream!.removeListener(_brushListener!);
+      }
       _brushTextureStream = null;
       _brushListener = null;
       if (_resolvedBrushTexture != null) {
@@ -354,7 +368,9 @@ class _ScratchToWinState extends State<ScratchToWin> {
       return;
     }
 
-    _brushTextureStream?.removeListener(_brushListener!);
+    if (_brushListener != null && _brushTextureStream != null) {
+      _brushTextureStream!.removeListener(_brushListener!);
+    }
 
     late ImageStreamListener listener;
     listener = ImageStreamListener(
@@ -385,7 +401,6 @@ class _ScratchToWinState extends State<ScratchToWin> {
     if (_brushListener != null && _brushTextureStream != null) {
       _brushTextureStream!.removeListener(_brushListener!);
     }
-    _audioPlayer?.dispose();
     super.dispose();
   }
 
@@ -399,7 +414,10 @@ class _ScratchToWinState extends State<ScratchToWin> {
       _gridCleared = 0;
       _grid = _freshGrid();
       _celebrationVisible = false;
+      _lastStrokePoint = null;
     });
+    _debrisKey.currentState?.clear();
+    _setProgress(0);
   }
 
   void _revealAll() {
@@ -417,6 +435,7 @@ class _ScratchToWinState extends State<ScratchToWin> {
         }
       }
     });
+    _setProgress(1);
     widget.onRevealProgress?.call(1.0);
     if (!hadThreshold) {
       widget.onThresholdReached?.call(1.0);
@@ -434,8 +453,18 @@ class _ScratchToWinState extends State<ScratchToWin> {
     return _gridCleared / _grid.length;
   }
 
+  void _setProgress(double value) {
+    final controller = widget.controller;
+    if (controller == null) {
+      return;
+    }
+    if (controller.revealProgress.value != value) {
+      controller.revealProgress.value = value;
+    }
+  }
+
   void _markGrid(Offset local, Size size, double radius) {
-    if (!widget.trackRevealProgress) {
+    if (!widget.trackRevealProgress || size.isEmpty) {
       return;
     }
     final n = widget.progressGridResolution;
@@ -474,6 +503,7 @@ class _ScratchToWinState extends State<ScratchToWin> {
       return;
     }
     final f = _fraction();
+    _setProgress(f);
     widget.onRevealProgress?.call(f);
     if (!_thresholdReported && f >= widget.revealThreshold) {
       _thresholdReported = true;
@@ -498,15 +528,15 @@ class _ScratchToWinState extends State<ScratchToWin> {
       });
     }
 
-    if (widget.playSoundOnCompletion && _audioPlayer != null) {
+    final playSound = widget.onCompletionSound;
+    if (playSound != null) {
       try {
-        if (widget.completionSoundUrl != null) {
-          await _audioPlayer!.play(UrlSource(widget.completionSoundUrl!));
-        } else if (widget.completionSoundAsset != null) {
-          await _audioPlayer!.play(AssetSource(widget.completionSoundAsset!));
-        }
-      } catch (_) {
-        // Missing asset or network — ignore so the widget still works.
+        await playSound();
+      } catch (error, stack) {
+        assert(() {
+          debugPrint('ScratchToWin onCompletionSound failed: $error\n$stack');
+          return true;
+        }());
       }
     }
   }
@@ -519,13 +549,56 @@ class _ScratchToWinState extends State<ScratchToWin> {
     );
   }
 
+  void _strokeTo(Offset local, Size size) {
+    _scratchPath.lineTo(local.dx, local.dy);
+    _scratchPathRevision++;
+    _markGrid(local, size, widget.brushRadius);
+    _emitDebris(local);
+    _lastStrokePoint = local;
+  }
+
+  Color _debrisBaseColor() {
+    if (widget.overlayColor != null) {
+      return widget.overlayColor!;
+    }
+    return const Color(0xFFB0B0B0);
+  }
+
+  final math.Random _strokeRand = math.Random();
+
+  void _emitDebris(Offset local) {
+    if (!widget.showScratchDebris) {
+      return;
+    }
+    final last = _lastStrokePoint;
+    final dir = last == null ? null : local - last;
+    _debrisKey.currentState?.emit(
+      local,
+      strokeDirection: dir,
+      baseColor: _debrisBaseColor(),
+      count: 2 + _strokeRand.nextInt(3),
+    );
+  }
+
+  /// Interpolates between pointer samples so fast strokes do not leave gaps.
   void _appendStrokePoint(Offset local) {
     if (_fullyRevealed) {
       return;
     }
-    _scratchPath.lineTo(local.dx, local.dy);
-    _scratchPathRevision++;
-    _markGrid(local, _lastSize ?? Size.zero, widget.brushRadius);
+    final size = _lastSize ?? Size.zero;
+    final last = _lastStrokePoint;
+    if (last != null) {
+      final distance = (local - last).distance;
+      final step = math.max(1.0, widget.brushRadius * 0.4);
+      if (distance > step) {
+        final segments = (distance / step).floor();
+        for (var i = 1; i < segments; i++) {
+          final t = i / segments;
+          _strokeTo(Offset.lerp(last, local, t)!, size);
+        }
+      }
+    }
+    _strokeTo(local, size);
   }
 
   void _handlePointerDown(PointerDownEvent e) {
@@ -540,6 +613,7 @@ class _ScratchToWinState extends State<ScratchToWin> {
       final local = e.localPosition;
       _scratchPath.moveTo(local.dx, local.dy);
       _scratchPathRevision++;
+      _lastStrokePoint = local;
 
       final box = context.findRenderObject() as RenderBox?;
       final size = box?.size;
@@ -547,6 +621,7 @@ class _ScratchToWinState extends State<ScratchToWin> {
         _lastSize = size;
         _markGrid(local, size, widget.brushRadius);
       }
+      _emitDebris(local);
       widget.onScratchStart?.call(_details(local));
       _emitProgress();
       setState(() {});
@@ -558,13 +633,12 @@ class _ScratchToWinState extends State<ScratchToWin> {
       return;
     }
     final local = e.localPosition;
-    _appendStrokePoint(local);
-
     final box = context.findRenderObject() as RenderBox?;
     final size = box?.size;
     if (size != null) {
       _lastSize = size;
     }
+    _appendStrokePoint(local);
     widget.onScratchUpdate?.call(_details(local));
     _emitProgress();
     setState(() {});
@@ -577,6 +651,7 @@ class _ScratchToWinState extends State<ScratchToWin> {
     _activePointers--;
     final local = e.localPosition;
     if (_activePointers == 0) {
+      _lastStrokePoint = null;
       widget.onScratchEnd?.call(_details(local));
     }
     setState(() {});
@@ -588,6 +663,9 @@ class _ScratchToWinState extends State<ScratchToWin> {
     }
     _activePointers--;
     final local = e.localPosition;
+    if (_activePointers == 0) {
+      _lastStrokePoint = null;
+    }
     widget.onScratchCancel?.call(_details(local));
     setState(() {});
   }
@@ -606,8 +684,8 @@ class _ScratchToWinState extends State<ScratchToWin> {
           ],
         );
 
-    final effectiveGradient =
-        widget.overlayGradient ?? (widget.overlayColor == null ? gradient : null);
+    final effectiveGradient = widget.overlayGradient ??
+        (widget.overlayColor == null ? gradient : null);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -641,13 +719,17 @@ class _ScratchToWinState extends State<ScratchToWin> {
                         path: _scratchPath,
                         scratchPathRevision: _scratchPathRevision,
                         brushRadius: widget.brushRadius,
-                        overlayColor: widget.overlayImage != null ? null : widget.overlayColor,
-                        overlayGradient: widget.overlayImage != null ? null : effectiveGradient,
+                        overlayColor: widget.overlayImage != null
+                            ? null
+                            : widget.overlayColor,
+                        overlayGradient: widget.overlayImage != null
+                            ? null
+                            : effectiveGradient,
                         overlayImage: _resolvedOverlayImage,
                         overlayImageFit: widget.overlayImageFit,
                         brushTextureImage: _resolvedBrushTexture,
-                        brushTextureLoading:
-                            widget.brushTexture != null && _resolvedBrushTexture == null,
+                        brushTextureLoading: widget.brushTexture != null &&
+                            _resolvedBrushTexture == null,
                         fullyRevealed: _fullyRevealed,
                       ),
                     ),
@@ -655,6 +737,14 @@ class _ScratchToWinState extends State<ScratchToWin> {
                 ),
               ),
             ),
+            if (widget.showScratchDebris && !_fullyRevealed)
+              Positioned.fill(
+                child: ScratchDebrisLayer(
+                  key: _debrisKey,
+                  areaSize: size,
+                  enabled: widget.showScratchDebris,
+                ),
+              ),
             if (widget.playConfettiOnThreshold && _celebrationVisible)
               Positioned.fill(
                 child: IgnorePointer(

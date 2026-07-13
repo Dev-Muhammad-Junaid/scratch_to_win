@@ -28,11 +28,13 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
   double _borderRadius = 16;
 
   // --- Child (prize) ---
-  final TextEditingController _prizeText = TextEditingController(text: 'You won!');
+  final TextEditingController _prizeText =
+      TextEditingController(text: 'You won!');
 
   // --- Brush ---
   double _brushRadius = 24;
   bool _useBrushTexture = true;
+  bool _showScratchDebris = true;
   final TextEditingController _brushTextureUrl = TextEditingController(
     text: 'https://picsum.photos/seed/scratchbrush/128/128',
   );
@@ -56,13 +58,12 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
   double _confettiMaxW = 30;
   double _confettiMaxH = 15;
 
-  bool _playSoundOnCompletion = false;
-  final TextEditingController _completionSoundAsset = TextEditingController();
-  final TextEditingController _completionSoundUrl = TextEditingController();
+  bool _invokeCompletionSoundCallback = true;
 
   // --- Reveal assist ---
   bool _showRevealAssistButton = true;
-  final TextEditingController _revealAssistLabel = TextEditingController(text: 'Reveal prize');
+  final TextEditingController _revealAssistLabel =
+      TextEditingController(text: 'Reveal prize');
   double _assistPadLeft = 0;
   double _assistPadRight = 0;
   double _assistPadTop = 0;
@@ -83,9 +84,8 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
     _overlayImageUrl.dispose();
     _brushTextureUrl.dispose();
     _prizeText.dispose();
-    _completionSoundAsset.dispose();
-    _completionSoundUrl.dispose();
     _revealAssistLabel.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
@@ -124,6 +124,7 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
       _prizeText.text = 'You won!';
       _brushRadius = 24;
       _useBrushTexture = true;
+      _showScratchDebris = true;
       _brushTextureUrl.text = 'https://picsum.photos/seed/scratchbrush/128/128';
       _trackRevealProgress = true;
       _revealThreshold = 0.55;
@@ -138,9 +139,7 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
       _confettiMinH = 10;
       _confettiMaxW = 30;
       _confettiMaxH = 15;
-      _playSoundOnCompletion = false;
-      _completionSoundAsset.clear();
-      _completionSoundUrl.clear();
+      _invokeCompletionSoundCallback = true;
       _showRevealAssistButton = true;
       _revealAssistLabel.text = 'Reveal prize';
       _assistPadLeft = 0;
@@ -201,9 +200,6 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
     final borderRadius = BorderRadius.circular(_borderRadius);
     final gridRes = _progressGridResolution.round().clamp(4, 96);
 
-    final soundConfigured = _completionSoundAsset.text.trim().isNotEmpty ||
-        _completionSoundUrl.text.trim().isNotEmpty;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('scratch_to_win lab'),
@@ -225,38 +221,20 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Text(
-              'Progress ${_progressPercent()} · threshold ${_thresholdHit ? "hit" : "open"}',
-              style: theme.textTheme.titleMedium,
+            child: ValueListenableBuilder<double>(
+              valueListenable: _controller.revealProgress,
+              builder: (context, notifierProgress, _) {
+                final shown =
+                    _trackRevealProgress ? notifierProgress : _progress;
+                return Text(
+                  'Progress ${(shown * 100).clamp(0, 100).toStringAsFixed(0)}%'
+                  ' · threshold ${_thresholdHit ? "hit" : "open"}'
+                  ' · controller.revealProgress',
+                  style: theme.textTheme.titleMedium,
+                );
+              },
             ),
           ),
-          if (_playSoundOnCompletion && !soundConfigured)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.errorContainer,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Sound is on but no asset or URL is set — add one below or turn sound off.',
-                          style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () => setState(() => _playSoundOnCompletion = false),
-                        child: const Text('Turn off'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
           SizedBox(
             height: 280,
             child: Padding(
@@ -281,6 +259,7 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                   overlayImageFit: _overlayImageFit,
                   brushRadius: _brushRadius,
                   brushTexture: _brushTexture,
+                  showScratchDebris: _showScratchDebris,
                   revealThreshold: _revealThreshold,
                   trackRevealProgress: _trackRevealProgress,
                   progressGridResolution: gridRes,
@@ -288,9 +267,12 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                   hapticFeedbackOnThreshold: _hapticFeedbackOnThreshold,
                   enabled: _scratchEnabled,
                   playConfettiOnThreshold: _playConfettiOnThreshold,
-                  confettiParticleCount: _confettiParticles.round().clamp(1, 120),
+                  confettiParticleCount:
+                      _confettiParticles.round().clamp(1, 120),
                   confettiDuration: Duration(
-                    milliseconds: (_confettiDurationSec * 1000).round().clamp(200, 120000),
+                    milliseconds: (_confettiDurationSec * 1000)
+                        .round()
+                        .clamp(200, 120000),
                   ),
                   confettiMinChipSize: Size(
                     math.min(_confettiMinW, _confettiMaxW),
@@ -300,27 +282,32 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                     math.max(_confettiMinW, _confettiMaxW),
                     math.max(_confettiMinH, _confettiMaxH),
                   ),
-                  playSoundOnCompletion: _playSoundOnCompletion,
-                  completionSoundAsset: _nullableAsset(_completionSoundAsset.text),
-                  completionSoundUrl: _nullableUrl(_completionSoundUrl.text),
+                  onCompletionSound: _invokeCompletionSoundCallback
+                      ? () async {
+                          _log('onCompletionSound (host app plays SFX here)');
+                        }
+                      : null,
                   showRevealAssistButton: _showRevealAssistButton,
-                  revealAssistButtonLabel: _revealAssistLabel.text.trim().isEmpty
-                      ? ''
-                      : _revealAssistLabel.text.trim(),
+                  revealAssistButtonLabel:
+                      _revealAssistLabel.text.trim().isEmpty
+                          ? ''
+                          : _revealAssistLabel.text.trim(),
                   revealAssistPadding: EdgeInsets.only(
                     left: _assistPadLeft,
                     right: _assistPadRight,
                     top: _assistPadTop,
                     bottom: _assistPadBottom,
                   ),
-                  onScratchStart: (d) => _log('onScratchStart (${d.pointerCount} pointers)'),
+                  onScratchStart: (d) =>
+                      _log('onScratchStart (${d.pointerCount} pointers)'),
                   onScratchUpdate: (d) {
                     if (!_logMoveEvents) {
                       return;
                     }
                     _moveLogCounter++;
                     if (_moveLogCounter % 12 == 0) {
-                      _log('onScratchUpdate ~${(d.estimatedRevealFraction ?? 0).toStringAsFixed(2)}');
+                      _log(
+                          'onScratchUpdate ~${(d.estimatedRevealFraction ?? 0).toStringAsFixed(2)}');
                     }
                   },
                   onScratchEnd: (d) {
@@ -351,7 +338,8 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.emoji_events, size: 56, color: Colors.amber.shade800),
+                        Icon(Icons.emoji_events,
+                            size: 56, color: Colors.amber.shade800),
                         const SizedBox(height: 8),
                         Text(
                           _prizeText.text.isEmpty ? 'Prize' : _prizeText.text,
@@ -377,7 +365,8 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                       decoration: const InputDecoration(
                         labelText: 'Scratch surface',
                         border: OutlineInputBorder(),
-                        helperText: 'Default uses the package’s built‑in grey gradient.',
+                        helperText:
+                            'Default uses the package’s built‑in grey gradient.',
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<_SurfaceMode>(
@@ -411,12 +400,15 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                     ),
                     if (_surfaceMode == _SurfaceMode.solid) ...[
                       const SizedBox(height: 8),
-                      _colorTile('Solid color', _solidColor, (c) => setState(() => _solidColor = c)),
+                      _colorTile('Solid color', _solidColor,
+                          (c) => setState(() => _solidColor = c)),
                     ],
                     if (_surfaceMode == _SurfaceMode.gradient) ...[
                       const SizedBox(height: 8),
-                      _colorTile('Gradient A', _gradientA, (c) => setState(() => _gradientA = c)),
-                      _colorTile('Gradient B', _gradientB, (c) => setState(() => _gradientB = c)),
+                      _colorTile('Gradient A', _gradientA,
+                          (c) => setState(() => _gradientA = c)),
+                      _colorTile('Gradient B', _gradientB,
+                          (c) => setState(() => _gradientB = c)),
                     ],
                     if (_surfaceMode == _SurfaceMode.image) ...[
                       const SizedBox(height: 8),
@@ -425,7 +417,8 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                         decoration: const InputDecoration(
                           labelText: 'Overlay image URL',
                           border: OutlineInputBorder(),
-                          helperText: 'HTTPS network image; empty falls back to non-image modes',
+                          helperText:
+                              'HTTPS network image; empty falls back to non-image modes',
                         ),
                         onChanged: (_) => setState(() {}),
                       ),
@@ -441,7 +434,8 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                           isExpanded: true,
                           value: _overlayImageFit,
                           items: BoxFit.values
-                              .map((f) => DropdownMenuItem(value: f, child: Text(f.name)))
+                              .map((f) => DropdownMenuItem(
+                                  value: f, child: Text(f.name)))
                               .toList(),
                           onChanged: (v) {
                             if (v != null) {
@@ -480,8 +474,17 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                       (v) => setState(() => _brushRadius = v),
                     ),
                     SwitchListTile(
+                      title: const Text('Scratch debris particles'),
+                      subtitle: const Text(
+                        'Falling foil flakes while you scratch (more realistic scrape).',
+                      ),
+                      value: _showScratchDebris,
+                      onChanged: (v) => setState(() => _showScratchDebris = v),
+                    ),
+                    SwitchListTile(
                       title: const Text('Brush texture (network image)'),
-                      subtitle: const Text('Fully opaque pixels erase; empty URL disables.'),
+                      subtitle: const Text(
+                          'Fully opaque pixels erase; empty URL disables.'),
                       value: _useBrushTexture,
                       onChanged: (v) => setState(() => _useBrushTexture = v),
                     ),
@@ -502,9 +505,11 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                   children: [
                     SwitchListTile(
                       title: const Text('Track reveal progress'),
-                      subtitle: const Text('Off disables grid, progress, and threshold.'),
+                      subtitle: const Text(
+                          'Off disables grid, progress, and threshold.'),
                       value: _trackRevealProgress,
-                      onChanged: (v) => setState(() => _trackRevealProgress = v),
+                      onChanged: (v) =>
+                          setState(() => _trackRevealProgress = v),
                     ),
                     _sliderTile(
                       'Reveal threshold',
@@ -532,19 +537,22 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                   children: [
                     SwitchListTile(
                       title: const Text('Scratch layer enabled'),
-                      subtitle: const Text('Off lets taps pass through to the child.'),
+                      subtitle: const Text(
+                          'Off lets taps pass through to the child.'),
                       value: _scratchEnabled,
                       onChanged: (v) => setState(() => _scratchEnabled = v),
                     ),
                     SwitchListTile(
                       title: const Text('Haptic on scratch start'),
                       value: _hapticFeedbackOnStart,
-                      onChanged: (v) => setState(() => _hapticFeedbackOnStart = v),
+                      onChanged: (v) =>
+                          setState(() => _hapticFeedbackOnStart = v),
                     ),
                     SwitchListTile(
                       title: const Text('Haptic on threshold'),
                       value: _hapticFeedbackOnThreshold,
-                      onChanged: (v) => setState(() => _hapticFeedbackOnThreshold = v),
+                      onChanged: (v) =>
+                          setState(() => _hapticFeedbackOnThreshold = v),
                     ),
                   ],
                 ),
@@ -558,7 +566,8 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                         'Particles spread across the full card (rain + sparkle), then fade.',
                       ),
                       value: _playConfettiOnThreshold,
-                      onChanged: (v) => setState(() => _playConfettiOnThreshold = v),
+                      onChanged: (v) =>
+                          setState(() => _playConfettiOnThreshold = v),
                     ),
                     _sliderTile(
                       'Confetti particle count',
@@ -609,27 +618,13 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                     ),
                     const Divider(),
                     SwitchListTile(
-                      title: const Text('Play completion sound'),
-                      subtitle: const Text('URL takes precedence over asset path.'),
-                      value: _playSoundOnCompletion,
-                      onChanged: (v) => setState(() => _playSoundOnCompletion = v),
-                    ),
-                    TextField(
-                      controller: _completionSoundAsset,
-                      decoration: const InputDecoration(
-                        labelText: 'Asset path (host app pubspec)',
-                        hintText: 'assets/sounds/win.mp3',
-                        border: OutlineInputBorder(),
+                      title: const Text('onCompletionSound callback'),
+                      subtitle: const Text(
+                        'Package stays audio-free — wire audioplayers/just_audio in your app.',
                       ),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                    TextField(
-                      controller: _completionSoundUrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Sound URL',
-                        border: OutlineInputBorder(),
-                      ),
-                      onChanged: (_) => setState(() {}),
+                      value: _invokeCompletionSoundCallback,
+                      onChanged: (v) =>
+                          setState(() => _invokeCompletionSoundCallback = v),
                     ),
                   ],
                 ),
@@ -643,7 +638,8 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                         'Turn off to hide. If on, clear the label below to hide while keeping the switch on.',
                       ),
                       value: _showRevealAssistButton,
-                      onChanged: (v) => setState(() => _showRevealAssistButton = v),
+                      onChanged: (v) =>
+                          setState(() => _showRevealAssistButton = v),
                     ),
                     TextField(
                       controller: _revealAssistLabel,
@@ -653,16 +649,20 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                       ),
                       onChanged: (_) => setState(() {}),
                     ),
-                    _sliderTile('Assist padding left', _assistPadLeft, 0, 32, (v) {
+                    _sliderTile('Assist padding left', _assistPadLeft, 0, 32,
+                        (v) {
                       setState(() => _assistPadLeft = v);
                     }),
-                    _sliderTile('Assist padding right', _assistPadRight, 0, 32, (v) {
+                    _sliderTile('Assist padding right', _assistPadRight, 0, 32,
+                        (v) {
                       setState(() => _assistPadRight = v);
                     }),
-                    _sliderTile('Assist padding top', _assistPadTop, 0, 32, (v) {
+                    _sliderTile('Assist padding top', _assistPadTop, 0, 32,
+                        (v) {
                       setState(() => _assistPadTop = v);
                     }),
-                    _sliderTile('Assist padding bottom', _assistPadBottom, 0, 48, (v) {
+                    _sliderTile(
+                        'Assist padding bottom', _assistPadBottom, 0, 48, (v) {
                       setState(() => _assistPadBottom = v);
                     }),
                   ],
@@ -678,7 +678,8 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                     ),
                     SwitchListTile(
                       title: const Text('Verbose move logging'),
-                      subtitle: const Text('Logs throttled onScratchUpdate samples.'),
+                      subtitle:
+                          const Text('Logs throttled onScratchUpdate samples.'),
                       value: _logMoveEvents,
                       onChanged: (v) => setState(() => _logMoveEvents = v),
                     ),
@@ -690,7 +691,8 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                       ),
                     ),
                     ..._eventLog.map(
-                      (e) => SelectableText(e, style: theme.textTheme.bodySmall),
+                      (e) =>
+                          SelectableText(e, style: theme.textTheme.bodySmall),
                     ),
                   ],
                 ),
@@ -699,7 +701,8 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                   child: Text(
                     'Tip: when you add new ScratchToWin fields, wire them in '
                     'scratch_customizer_page.dart so this lab stays complete.',
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.hintColor),
                   ),
                 ),
               ],
@@ -709,8 +712,6 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
       ),
     );
   }
-
-  String _progressPercent() => '${(_progress * 100).clamp(0, 100).toStringAsFixed(0)}%';
 
   Widget _section(
     BuildContext context, {
@@ -790,17 +791,6 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
       ),
     );
   }
-
-}
-
-String? _nullableAsset(String raw) {
-  final s = raw.trim();
-  return s.isEmpty ? null : s;
-}
-
-String? _nullableUrl(String raw) {
-  final s = raw.trim();
-  return s.isEmpty ? null : s;
 }
 
 class _SimpleColorDialog extends StatefulWidget {
@@ -844,7 +834,8 @@ class _SimpleColorDialogState extends State<_SimpleColorDialog> {
               children: [
                 Text('R ${_r.toStringAsFixed(2)}'),
                 Expanded(
-                  child: Slider(value: _r, onChanged: (v) => setState(() => _r = v)),
+                  child: Slider(
+                      value: _r, onChanged: (v) => setState(() => _r = v)),
                 ),
               ],
             ),
@@ -852,7 +843,8 @@ class _SimpleColorDialogState extends State<_SimpleColorDialog> {
               children: [
                 Text('G ${_g.toStringAsFixed(2)}'),
                 Expanded(
-                  child: Slider(value: _g, onChanged: (v) => setState(() => _g = v)),
+                  child: Slider(
+                      value: _g, onChanged: (v) => setState(() => _g = v)),
                 ),
               ],
             ),
@@ -860,7 +852,8 @@ class _SimpleColorDialogState extends State<_SimpleColorDialog> {
               children: [
                 Text('B ${_b.toStringAsFixed(2)}'),
                 Expanded(
-                  child: Slider(value: _b, onChanged: (v) => setState(() => _b = v)),
+                  child: Slider(
+                      value: _b, onChanged: (v) => setState(() => _b = v)),
                 ),
               ],
             ),
@@ -870,8 +863,12 @@ class _SimpleColorDialogState extends State<_SimpleColorDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(context, _color), child: const Text('Use')),
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        FilledButton(
+            onPressed: () => Navigator.pop(context, _color),
+            child: const Text('Use')),
       ],
     );
   }

@@ -1,3 +1,20 @@
+## 0.3.0
+
+* **Scratch debris:** Optional **`showScratchDebris`** emits falling foil flakes along the brush while scratching for a more realistic scrape feel.
+* **Breaking:** Removed the `audioplayers` dependency and the built-in sound fields (`playSoundOnCompletion`, `completionSoundAsset`, `completionSoundUrl`). Play completion SFX from your app via the new **`onCompletionSound`** callback — keeps the package Web/WASM-compatible and recovers pub.dev platform points.
+* **SDK:** `sdk: '>=3.6.0 <4.0.0'`, `flutter: '>=3.27.0'` (required for `Color.withValues`); verified against Flutter **3.44** stable.
+* **pubspec:** Shortened `description` (60–180 chars) to restore the missing convention points; kept `topics`.
+* **Controller:** Documented constructor; added **`revealProgress`** (`ValueNotifier<double>`) and **`dispose()`**.
+* **Scratch quality:** Interpolates pointer samples on fast strokes so the brush path does not leave gaps.
+* **Docs / CI:** Platform section in README; CI runs `dart format` and `flutter analyze --fatal-infos`.
+
+## 0.2.5
+
+* **SDK constraints:** Fixed `sdk` from the invalid `^3.10.4` to `'>=3.6.0 <4.0.0'`; bumped minimum Flutter from `>=1.17.0` to `>=3.27.0` — required since `Color.withValues(alpha:)` (used internally) was introduced in Flutter 3.27.
+* **pubspec:** Added `topics: [ui, animation, widget, game]` for better pub.dev discoverability; expanded description.
+* **Docs:** Added field-level dartdoc comments to all `ScratchPainter` fields; moved the constructor inline comment on `scratchPathRevision` to a proper `///` doc.
+* **CI:** Added `dart format --output=none --set-exit-if-changed` and `flutter analyze --fatal-infos` steps; added a dedicated `publish-dry-run` job.
+
 ## 0.2.4
 
 * README: short note that GitHub Actions badges (and pub.dev’s copy of images) can lag behind a few minutes after CI goes green.

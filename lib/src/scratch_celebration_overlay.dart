@@ -33,7 +33,8 @@ class ScratchCelebrationOverlay extends StatefulWidget {
   final VoidCallback? onEnded;
 
   @override
-  State<ScratchCelebrationOverlay> createState() => _ScratchCelebrationOverlayState();
+  State<ScratchCelebrationOverlay> createState() =>
+      _ScratchCelebrationOverlayState();
 }
 
 class _Particle {
@@ -88,7 +89,8 @@ class _ScratchCelebrationOverlayState extends State<ScratchCelebrationOverlay>
       return true;
     }());
     if (widget.areaSize.width <= 0 || widget.areaSize.height <= 0) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => widget.onEnded?.call());
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => widget.onEnded?.call());
       return;
     }
     _spawn();
@@ -210,7 +212,8 @@ class _ScratchCelebrationOverlayState extends State<ScratchCelebrationOverlay>
     }
 
     final maxMs = widget.confettiDuration.inMilliseconds;
-    final timedOut = maxMs > 0 && (elapsed - _firstTick).inMilliseconds >= maxMs;
+    final timedOut =
+        maxMs > 0 && (elapsed - _firstTick).inMilliseconds >= maxMs;
     if (visible == 0 || timedOut) {
       _ticker?.dispose();
       _ticker = null;

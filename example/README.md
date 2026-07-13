@@ -1,6 +1,6 @@
 # scratch_to_win example — interactive lab
 
-This app is a **full settings panel** for every public option on [`ScratchToWin`](../lib/src/scratch_to_win.dart): overlay surface, brush, progress, confetti, sound, reveal assist, and callback logging.
+This app is a **full settings panel** for every public option on [`ScratchToWin`](../lib/src/scratch_to_win.dart): overlay surface, brush, progress, confetti, completion-sound callback, reveal assist, and callback logging.
 
 ## Run locally
 

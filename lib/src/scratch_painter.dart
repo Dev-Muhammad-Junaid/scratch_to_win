@@ -10,7 +10,6 @@ class ScratchPainter extends CustomPainter {
   ScratchPainter({
     required this.borderRadius,
     required this.path,
-    /// Bumps whenever [path] is mutated in place (reference stays the same).
     required this.scratchPathRevision,
     required this.brushRadius,
     this.overlayColor,
@@ -22,21 +21,37 @@ class ScratchPainter extends CustomPainter {
     required this.fullyRevealed,
   });
 
+  /// Border radius clipping the scratch surface.
   final BorderRadius borderRadius;
+
+  /// The scratch path built up by pointer events.
   final Path path;
 
-  /// Increments when stroke points are added or the path is reset; drives [shouldRepaint].
+  /// Increments whenever [path] is mutated in place (reference stays the same); drives [shouldRepaint].
   final int scratchPathRevision;
 
+  /// Half-width of the round scratch stroke.
   final double brushRadius;
+
+  /// Solid fill color for the overlay (used when no gradient or image is set).
   final Color? overlayColor;
+
+  /// Gradient fill for the overlay (ignored when [overlayImage] is set).
   final Gradient? overlayGradient;
+
+  /// Decoded overlay image scratched away by the brush.
   final ui.Image? overlayImage;
+
+  /// How [overlayImage] is fitted to the scratch area.
   final BoxFit overlayImageFit;
+
+  /// Decoded brush-texture image; opaque pixels erase the overlay via [BlendMode.dstOut].
   final ui.Image? brushTextureImage;
 
-  /// True when a [ScratchToWin.brushTexture] is set but not decoded yet.
+  /// True when a [ScratchToWin.brushTexture] is set but not yet decoded.
   final bool brushTextureLoading;
+
+  /// When true the overlay is not painted (child fully revealed).
   final bool fullyRevealed;
 
   bool get _textureMode => brushTextureImage != null || brushTextureLoading;
@@ -107,7 +122,8 @@ class ScratchPainter extends CustomPainter {
         if (tangent == null) {
           break;
         }
-        final dst = Rect.fromCircle(center: tangent.position, radius: brushRadius);
+        final dst =
+            Rect.fromCircle(center: tangent.position, radius: brushRadius);
         _drawBrushStamp(canvas, tex, dst);
         d += step;
       }
@@ -120,9 +136,11 @@ class ScratchPainter extends CustomPainter {
 
     if (tex != null) {
       canvas.save();
-      final clip = Path()..addOval(Rect.fromCircle(center: center, radius: radius));
+      final clip = Path()
+        ..addOval(Rect.fromCircle(center: center, radius: radius));
       canvas.clipPath(clip);
-      final src = Rect.fromLTWH(0, 0, tex.width.toDouble(), tex.height.toDouble());
+      final src =
+          Rect.fromLTWH(0, 0, tex.width.toDouble(), tex.height.toDouble());
       final paint = Paint()..blendMode = BlendMode.dstOut;
       canvas.drawImageRect(tex, src, dst, paint);
       canvas.restore();
