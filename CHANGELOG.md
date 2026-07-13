@@ -1,3 +1,7 @@
+## 0.3.1
+
+* **Scratch debris:** Larger, higher-contrast foil flakes (outline + light/dark shards) so the scrape effect is obvious on image overlays and on the web demo.
+
 ## 0.3.0
 
 * **Scratch debris:** Optional **`showScratchDebris`** emits falling foil flakes along the brush while scratching for a more realistic scrape feel.

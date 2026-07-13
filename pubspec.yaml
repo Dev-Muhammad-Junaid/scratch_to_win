@@ -1,6 +1,6 @@
 name: scratch_to_win
 description: Scratch-off overlay for Flutter — reveal widgets with gestures, progress, confetti, and haptics.
-version: 0.3.0
+version: 0.3.1
 homepage: https://github.com/Dev-Muhammad-Junaid/scratch_to_win
 repository: https://github.com/Dev-Muhammad-Junaid/scratch_to_win
 issue_tracker: https://github.com/Dev-Muhammad-Junaid/scratch_to_win/issues

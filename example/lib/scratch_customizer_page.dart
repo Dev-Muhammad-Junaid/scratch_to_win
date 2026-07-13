@@ -476,7 +476,7 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                     SwitchListTile(
                       title: const Text('Scratch debris particles'),
                       subtitle: const Text(
-                        'Falling foil flakes while you scratch (more realistic scrape).',
+                        'ON by default — drag on the card to see falling foil flakes.',
                       ),
                       value: _showScratchDebris,
                       onChanged: (v) => setState(() => _showScratchDebris = v),
@@ -719,7 +719,7 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
     required List<Widget> children,
   }) {
     return ExpansionTile(
-      initiallyExpanded: title == 'Surface & frame',
+      initiallyExpanded: title == 'Surface & frame' || title == 'Brush',
       title: Text(title, style: Theme.of(context).textTheme.titleSmall),
       children: [
         Padding(

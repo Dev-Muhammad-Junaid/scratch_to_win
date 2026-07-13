@@ -28,18 +28,17 @@ class ScratchDebrisLayer extends StatefulWidget {
 /// Public state so [ScratchToWin] can spawn flakes along the brush path.
 class ScratchDebrisLayerState extends State<ScratchDebrisLayer>
     with SingleTickerProviderStateMixin {
-  static const double _gravity = 980;
-  static const double _drag = 0.97;
-  static const int _maxParticles = 120;
+  static const double _gravity = 1400;
+  static const double _drag = 0.985;
+  static const int _maxParticles = 160;
 
   final List<_DebrisParticle> _particles = <_DebrisParticle>[];
   final math.Random _rand = math.Random();
   Ticker? _ticker;
   Duration _prevElapsed = Duration.zero;
   Offset? _lastEmit;
-  int _emitBudget = 0;
 
-  /// Spawns a few flakes at [local] (scratch-layer coordinates).
+  /// Spawns flakes at [local] (scratch-layer coordinates).
   ///
   /// [strokeDirection] biases initial velocity (optional). [baseColor] tints
   /// flakes toward the overlay foil color.
@@ -47,7 +46,7 @@ class ScratchDebrisLayerState extends State<ScratchDebrisLayer>
     Offset local, {
     Offset? strokeDirection,
     Color? baseColor,
-    int count = 3,
+    int count = 5,
   }) {
     if (!widget.enabled || !mounted) {
       return;
@@ -56,16 +55,10 @@ class ScratchDebrisLayerState extends State<ScratchDebrisLayer>
       return;
     }
 
-    // Throttle dense move events so we don't flood the particle list.
+    // Light throttle so fast pointer streams stay readable, not invisible.
     final last = _lastEmit;
-    if (last != null && (local - last).distance < 4) {
-      _emitBudget++;
-      if (_emitBudget < 2) {
-        return;
-      }
-      _emitBudget = 0;
-    } else {
-      _emitBudget = 0;
+    if (last != null && (local - last).distance < 2.5) {
+      return;
     }
     _lastEmit = local;
 
@@ -80,39 +73,41 @@ class ScratchDebrisLayerState extends State<ScratchDebrisLayer>
       }
     }
 
-    final foil = baseColor ?? const Color(0xFFB0B0B0);
-    final n = count.clamp(1, 6);
+    final foil = baseColor ?? const Color(0xFFC8C8C8);
+    final n = count.clamp(2, 10);
 
     for (var i = 0; i < n; i++) {
       if (_particles.length >= _maxParticles) {
         _particles.removeAt(0);
       }
       final jitter = Offset(
-        (_rand.nextDouble() - 0.5) * 10,
-        (_rand.nextDouble() - 0.5) * 10,
+        (_rand.nextDouble() - 0.5) * 14,
+        (_rand.nextDouble() - 0.5) * 14,
       );
-      final side = (_rand.nextDouble() - 0.5) * 140;
-      final sprayX = -ny * side + nx * (_rand.nextDouble() * 40);
-      final sprayY = nx * side.abs() * 0.15 + 40 + _rand.nextDouble() * 120;
-      final size = 1.5 + _rand.nextDouble() * 3.5;
-      final shade = 0.75 + _rand.nextDouble() * 0.35;
+      final side = (_rand.nextDouble() - 0.5) * 220;
+      final sprayX = -ny * side + nx * (_rand.nextDouble() * 70);
+      final sprayY = nx * side.abs() * 0.2 + 80 + _rand.nextDouble() * 220;
+      final size = 3.5 + _rand.nextDouble() * 7.5;
+      // Alternate light / dark shards so flakes read on any overlay.
+      final light = _rand.nextBool();
+      final shade = light
+          ? 0.92 + _rand.nextDouble() * 0.35
+          : 0.35 + _rand.nextDouble() * 0.35;
+      final r = (foil.r * 255.0 * shade).round().clamp(30, 255);
+      final g = (foil.g * 255.0 * shade).round().clamp(30, 255);
+      final b = (foil.b * 255.0 * shade).round().clamp(30, 255);
       _particles.add(
         _DebrisParticle(
           x: local.dx + jitter.dx,
           y: local.dy + jitter.dy,
-          vx: sprayX + (_rand.nextDouble() - 0.5) * 60,
+          vx: sprayX + (_rand.nextDouble() - 0.5) * 90,
           vy: sprayY,
           rotation: _rand.nextDouble() * math.pi * 2,
-          spin: (_rand.nextDouble() - 0.5) * 12,
-          color: Color.fromARGB(
-            255,
-            (foil.r * 255.0 * shade).round().clamp(40, 255),
-            (foil.g * 255.0 * shade).round().clamp(40, 255),
-            (foil.b * 255.0 * shade).round().clamp(40, 255),
-          ),
-          w: size * (0.6 + _rand.nextDouble() * 1.4),
-          h: size * (0.4 + _rand.nextDouble()),
-          life: 0.55 + _rand.nextDouble() * 0.55,
+          spin: (_rand.nextDouble() - 0.5) * 16,
+          color: Color.fromARGB(255, r, g, b),
+          w: size * (0.7 + _rand.nextDouble() * 1.5),
+          h: size * (0.45 + _rand.nextDouble() * 0.9),
+          life: 0.85 + _rand.nextDouble() * 0.75,
         ),
       );
     }
@@ -121,6 +116,7 @@ class ScratchDebrisLayerState extends State<ScratchDebrisLayer>
     setState(() {});
   }
 
+  /// Removes all flakes immediately.
   void clear() {
     _particles.clear();
     _lastEmit = null;
@@ -166,8 +162,8 @@ class ScratchDebrisLayerState extends State<ScratchDebrisLayer>
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.rotation += p.spin * dt;
-      p.life -= dt * 1.35;
-      return p.life <= 0 || p.y > h + 40 || p.x < -40 || p.x > w + 40;
+      p.life -= dt * 0.95;
+      return p.life <= 0 || p.y > h + 50 || p.x < -50 || p.x > w + 50;
     });
 
     if (mounted) {
@@ -231,24 +227,29 @@ class _DebrisPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     for (final p in particles) {
-      final o = (p.life / 0.9).clamp(0.0, 1.0);
+      final o = (p.life / 1.1).clamp(0.0, 1.0);
       if (o <= 0) {
         continue;
       }
-      final paint = Paint()
-        ..color = p.color.withValues(alpha: o * 0.9)
-        ..style = PaintingStyle.fill;
       canvas.save();
       canvas.translate(p.x, p.y);
       canvas.rotate(p.rotation);
-      // Irregular flake: thin diamond / shard.
       final path = Path()
         ..moveTo(0, -p.h)
         ..lineTo(p.w * 0.55, 0)
         ..lineTo(0, p.h * 0.65)
         ..lineTo(-p.w * 0.45, 0)
         ..close();
-      canvas.drawPath(path, paint);
+      // Dark rim so flakes stay readable on light or busy overlays.
+      final rim = Paint()
+        ..color = Colors.black.withValues(alpha: o * 0.45)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.1;
+      final fill = Paint()
+        ..color = p.color.withValues(alpha: o * 0.95)
+        ..style = PaintingStyle.fill;
+      canvas.drawPath(path, fill);
+      canvas.drawPath(path, rim);
       canvas.restore();
     }
   }

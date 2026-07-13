@@ -561,7 +561,8 @@ class _ScratchToWinState extends State<ScratchToWin> {
     if (widget.overlayColor != null) {
       return widget.overlayColor!;
     }
-    return const Color(0xFFB0B0B0);
+    // Image / gradient overlays: bright silver so flakes stay obvious.
+    return const Color(0xFFD8D8D8);
   }
 
   final math.Random _strokeRand = math.Random();
@@ -576,7 +577,7 @@ class _ScratchToWinState extends State<ScratchToWin> {
       local,
       strokeDirection: dir,
       baseColor: _debrisBaseColor(),
-      count: 2 + _strokeRand.nextInt(3),
+      count: 4 + _strokeRand.nextInt(4),
     );
   }
 

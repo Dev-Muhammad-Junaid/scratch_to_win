@@ -13,7 +13,7 @@ Flutter scratch-off overlay: hide any widget, drag to reveal it, track progress,
 
 ```yaml
 dependencies:
-  scratch_to_win: ^0.3.0
+  scratch_to_win: ^0.3.1
 ```
 
 ## Platforms
