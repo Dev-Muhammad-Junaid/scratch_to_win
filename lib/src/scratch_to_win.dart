@@ -242,8 +242,7 @@ class _ScratchToWinState extends State<ScratchToWin> {
   int _celebrationSession = 0;
   bool _celebrationVisible = false;
 
-  final GlobalKey<ScratchDebrisLayerState> _debrisKey =
-      GlobalKey<ScratchDebrisLayerState>();
+  final ScratchDebrisController _debris = ScratchDebrisController();
 
   /// Effective assist label (defaults to `Reveal` when [ScratchToWin.revealAssistButtonLabel] is null).
   String get _revealAssistEffectiveLabel =>
@@ -416,7 +415,7 @@ class _ScratchToWinState extends State<ScratchToWin> {
       _celebrationVisible = false;
       _lastStrokePoint = null;
     });
-    _debrisKey.currentState?.clear();
+    _debris.clear();
     _setProgress(0);
   }
 
@@ -573,11 +572,11 @@ class _ScratchToWinState extends State<ScratchToWin> {
     }
     final last = _lastStrokePoint;
     final dir = last == null ? null : local - last;
-    _debrisKey.currentState?.emit(
+    _debris.emit(
       local,
       strokeDirection: dir,
       baseColor: _debrisBaseColor(),
-      count: 4 + _strokeRand.nextInt(4),
+      count: 5 + _strokeRand.nextInt(5),
     );
   }
 
@@ -712,40 +711,44 @@ class _ScratchToWinState extends State<ScratchToWin> {
                   onPointerMove: _handlePointerMove,
                   onPointerUp: _handlePointerUp,
                   onPointerCancel: _handlePointerCancel,
-                  child: RepaintBoundary(
-                    child: CustomPaint(
-                      size: size,
-                      painter: ScratchPainter(
-                        borderRadius: widget.borderRadius,
-                        path: _scratchPath,
-                        scratchPathRevision: _scratchPathRevision,
-                        brushRadius: widget.brushRadius,
-                        overlayColor: widget.overlayImage != null
-                            ? null
-                            : widget.overlayColor,
-                        overlayGradient: widget.overlayImage != null
-                            ? null
-                            : effectiveGradient,
-                        overlayImage: _resolvedOverlayImage,
-                        overlayImageFit: widget.overlayImageFit,
-                        brushTextureImage: _resolvedBrushTexture,
-                        brushTextureLoading: widget.brushTexture != null &&
-                            _resolvedBrushTexture == null,
-                        fullyRevealed: _fullyRevealed,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    clipBehavior: Clip.none,
+                    children: [
+                      RepaintBoundary(
+                        child: CustomPaint(
+                          size: size,
+                          painter: ScratchPainter(
+                            borderRadius: widget.borderRadius,
+                            path: _scratchPath,
+                            scratchPathRevision: _scratchPathRevision,
+                            brushRadius: widget.brushRadius,
+                            overlayColor: widget.overlayImage != null
+                                ? null
+                                : widget.overlayColor,
+                            overlayGradient: widget.overlayImage != null
+                                ? null
+                                : effectiveGradient,
+                            overlayImage: _resolvedOverlayImage,
+                            overlayImageFit: widget.overlayImageFit,
+                            brushTextureImage: _resolvedBrushTexture,
+                            brushTextureLoading: widget.brushTexture != null &&
+                                _resolvedBrushTexture == null,
+                            fullyRevealed: _fullyRevealed,
+                          ),
+                        ),
                       ),
-                    ),
+                      if (widget.showScratchDebris && !_fullyRevealed)
+                        ScratchDebrisLayer(
+                          areaSize: size,
+                          controller: _debris,
+                          enabled: widget.showScratchDebris,
+                        ),
+                    ],
                   ),
                 ),
               ),
             ),
-            if (widget.showScratchDebris && !_fullyRevealed)
-              Positioned.fill(
-                child: ScratchDebrisLayer(
-                  key: _debrisKey,
-                  areaSize: size,
-                  enabled: widget.showScratchDebris,
-                ),
-              ),
             if (widget.playConfettiOnThreshold && _celebrationVisible)
               Positioned.fill(
                 child: IgnorePointer(

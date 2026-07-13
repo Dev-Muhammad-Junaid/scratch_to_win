@@ -474,9 +474,10 @@ class _ScratchCustomizerPageState extends State<ScratchCustomizerPage> {
                       (v) => setState(() => _brushRadius = v),
                     ),
                     SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
                       title: const Text('Scratch debris particles'),
                       subtitle: const Text(
-                        'ON by default — drag on the card to see falling foil flakes.',
+                        'Falling foil flakes while you drag (toggle off to disable).',
                       ),
                       value: _showScratchDebris,
                       onChanged: (v) => setState(() => _showScratchDebris = v),

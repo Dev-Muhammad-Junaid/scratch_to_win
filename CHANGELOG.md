@@ -1,6 +1,6 @@
 ## 0.3.1
 
-* **Scratch debris:** Larger, higher-contrast foil flakes (outline + light/dark shards) so the scrape effect is obvious on image overlays and on the web demo.
+* **Scratch debris:** Larger, higher-contrast foil flakes; spawn via an internal controller (more reliable than GlobalKey). Flakes are easier to see on image overlays and the web demo.
 
 ## 0.3.0
 

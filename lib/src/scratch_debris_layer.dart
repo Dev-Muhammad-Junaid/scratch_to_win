@@ -5,32 +5,58 @@ import 'package:flutter/scheduler.dart';
 
 /// Falling scratch flakes emitted while the user scrapes the overlay.
 ///
-/// Call [ScratchDebrisLayerState.emit] from the parent (via [GlobalKey]) as
-/// the brush moves. Particles fall with gravity and fade out.
+/// Drive this via [ScratchDebrisController] (owned by [ScratchToWin]) so
+/// spawning does not depend on [GlobalKey.currentState] timing.
 class ScratchDebrisLayer extends StatefulWidget {
   /// Creates a debris layer sized to [areaSize].
   const ScratchDebrisLayer({
     super.key,
     required this.areaSize,
+    required this.controller,
     this.enabled = true,
   });
 
   /// Bounds used for culling off-screen flakes.
   final Size areaSize;
 
-  /// When false, [ScratchDebrisLayerState.emit] is a no-op.
+  /// Shared spawn / clear API from the parent scratch widget.
+  final ScratchDebrisController controller;
+
+  /// When false, [ScratchDebrisController.emit] is a no-op.
   final bool enabled;
 
   @override
-  State<ScratchDebrisLayer> createState() => ScratchDebrisLayerState();
+  State<ScratchDebrisLayer> createState() => _ScratchDebrisLayerState();
 }
 
-/// Public state so [ScratchToWin] can spawn flakes along the brush path.
-class ScratchDebrisLayerState extends State<ScratchDebrisLayer>
+/// Lets [ScratchToWin] spawn flakes without a [GlobalKey].
+class ScratchDebrisController {
+  _ScratchDebrisLayerState? _state;
+
+  /// Spawns flakes at [local] (scratch-layer coordinates).
+  void emit(
+    Offset local, {
+    Offset? strokeDirection,
+    Color? baseColor,
+    int count = 5,
+  }) {
+    _state?.emit(
+      local,
+      strokeDirection: strokeDirection,
+      baseColor: baseColor,
+      count: count,
+    );
+  }
+
+  /// Removes all flakes immediately.
+  void clear() => _state?.clear();
+}
+
+class _ScratchDebrisLayerState extends State<ScratchDebrisLayer>
     with SingleTickerProviderStateMixin {
-  static const double _gravity = 1400;
-  static const double _drag = 0.985;
-  static const int _maxParticles = 160;
+  static const double _gravity = 900;
+  static const double _drag = 0.99;
+  static const int _maxParticles = 180;
 
   final List<_DebrisParticle> _particles = <_DebrisParticle>[];
   final math.Random _rand = math.Random();
@@ -38,10 +64,30 @@ class ScratchDebrisLayerState extends State<ScratchDebrisLayer>
   Duration _prevElapsed = Duration.zero;
   Offset? _lastEmit;
 
-  /// Spawns flakes at [local] (scratch-layer coordinates).
-  ///
-  /// [strokeDirection] biases initial velocity (optional). [baseColor] tints
-  /// flakes toward the overlay foil color.
+  @override
+  void initState() {
+    super.initState();
+    widget.controller._state = this;
+  }
+
+  @override
+  void didUpdateWidget(covariant ScratchDebrisLayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller._state = null;
+      widget.controller._state = this;
+    }
+  }
+
+  @override
+  void dispose() {
+    if (widget.controller._state == this) {
+      widget.controller._state = null;
+    }
+    _ticker?.dispose();
+    super.dispose();
+  }
+
   void emit(
     Offset local, {
     Offset? strokeDirection,
@@ -55,9 +101,8 @@ class ScratchDebrisLayerState extends State<ScratchDebrisLayer>
       return;
     }
 
-    // Light throttle so fast pointer streams stay readable, not invisible.
     final last = _lastEmit;
-    if (last != null && (local - last).distance < 2.5) {
+    if (last != null && (local - last).distance < 2) {
       return;
     }
     _lastEmit = local;
@@ -73,41 +118,44 @@ class ScratchDebrisLayerState extends State<ScratchDebrisLayer>
       }
     }
 
-    final foil = baseColor ?? const Color(0xFFC8C8C8);
-    final n = count.clamp(2, 10);
+    final foil = baseColor ?? const Color(0xFFE8E8E8);
+    final n = count.clamp(3, 12);
 
     for (var i = 0; i < n; i++) {
       if (_particles.length >= _maxParticles) {
         _particles.removeAt(0);
       }
       final jitter = Offset(
-        (_rand.nextDouble() - 0.5) * 14,
-        (_rand.nextDouble() - 0.5) * 14,
+        (_rand.nextDouble() - 0.5) * 18,
+        (_rand.nextDouble() - 0.5) * 18,
       );
-      final side = (_rand.nextDouble() - 0.5) * 220;
-      final sprayX = -ny * side + nx * (_rand.nextDouble() * 70);
-      final sprayY = nx * side.abs() * 0.2 + 80 + _rand.nextDouble() * 220;
-      final size = 3.5 + _rand.nextDouble() * 7.5;
-      // Alternate light / dark shards so flakes read on any overlay.
+      final side = (_rand.nextDouble() - 0.5) * 260;
+      final sprayX = -ny * side + nx * (_rand.nextDouble() * 80);
+      // Mild downward bias so flakes hang in view longer.
+      final sprayY = 20 + _rand.nextDouble() * 140;
+      final size = 5.0 + _rand.nextDouble() * 10.0;
       final light = _rand.nextBool();
       final shade = light
-          ? 0.92 + _rand.nextDouble() * 0.35
-          : 0.35 + _rand.nextDouble() * 0.35;
-      final r = (foil.r * 255.0 * shade).round().clamp(30, 255);
-      final g = (foil.g * 255.0 * shade).round().clamp(30, 255);
-      final b = (foil.b * 255.0 * shade).round().clamp(30, 255);
+          ? 0.95 + _rand.nextDouble() * 0.4
+          : 0.4 + _rand.nextDouble() * 0.35;
+      // Warm metallic foil — readable on photos and solid fills.
+      final r =
+          (foil.r * 255.0 * shade + (light ? 40 : 0)).round().clamp(40, 255);
+      final g =
+          (foil.g * 255.0 * shade + (light ? 28 : 0)).round().clamp(40, 255);
+      final b = (foil.b * 255.0 * shade * 0.85).round().clamp(30, 255);
       _particles.add(
         _DebrisParticle(
           x: local.dx + jitter.dx,
           y: local.dy + jitter.dy,
-          vx: sprayX + (_rand.nextDouble() - 0.5) * 90,
+          vx: sprayX + (_rand.nextDouble() - 0.5) * 100,
           vy: sprayY,
           rotation: _rand.nextDouble() * math.pi * 2,
-          spin: (_rand.nextDouble() - 0.5) * 16,
+          spin: (_rand.nextDouble() - 0.5) * 18,
           color: Color.fromARGB(255, r, g, b),
-          w: size * (0.7 + _rand.nextDouble() * 1.5),
-          h: size * (0.45 + _rand.nextDouble() * 0.9),
-          life: 0.85 + _rand.nextDouble() * 0.75,
+          w: size * (0.8 + _rand.nextDouble() * 1.4),
+          h: size * (0.5 + _rand.nextDouble() * 0.9),
+          life: 1.1 + _rand.nextDouble() * 0.9,
         ),
       );
     }
@@ -116,7 +164,6 @@ class ScratchDebrisLayerState extends State<ScratchDebrisLayer>
     setState(() {});
   }
 
-  /// Removes all flakes immediately.
   void clear() {
     _particles.clear();
     _lastEmit = null;
@@ -162,8 +209,8 @@ class ScratchDebrisLayerState extends State<ScratchDebrisLayer>
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.rotation += p.spin * dt;
-      p.life -= dt * 0.95;
-      return p.life <= 0 || p.y > h + 50 || p.x < -50 || p.x > w + 50;
+      p.life -= dt * 0.75;
+      return p.life <= 0 || p.y > h + 60 || p.x < -60 || p.x > w + 60;
     });
 
     if (mounted) {
@@ -173,21 +220,13 @@ class ScratchDebrisLayerState extends State<ScratchDebrisLayer>
   }
 
   @override
-  void dispose() {
-    _ticker?.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (_particles.isEmpty) {
-      return const SizedBox.shrink();
-    }
     return IgnorePointer(
       child: CustomPaint(
         size: widget.areaSize,
-        painter:
-            _DebrisPainter(particles: List<_DebrisParticle>.of(_particles)),
+        painter: _DebrisPainter(
+          particles: List<_DebrisParticle>.of(_particles),
+        ),
       ),
     );
   }
@@ -227,7 +266,7 @@ class _DebrisPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     for (final p in particles) {
-      final o = (p.life / 1.1).clamp(0.0, 1.0);
+      final o = (p.life / 1.2).clamp(0.0, 1.0);
       if (o <= 0) {
         continue;
       }
@@ -240,16 +279,19 @@ class _DebrisPainter extends CustomPainter {
         ..lineTo(0, p.h * 0.65)
         ..lineTo(-p.w * 0.45, 0)
         ..close();
-      // Dark rim so flakes stay readable on light or busy overlays.
-      final rim = Paint()
-        ..color = Colors.black.withValues(alpha: o * 0.45)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.1;
       final fill = Paint()
-        ..color = p.color.withValues(alpha: o * 0.95)
+        ..color = p.color.withValues(alpha: o * 0.98)
+        ..style = PaintingStyle.fill;
+      final rim = Paint()
+        ..color = Colors.black.withValues(alpha: o * 0.55)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.25;
+      final shine = Paint()
+        ..color = Colors.white.withValues(alpha: o * 0.55)
         ..style = PaintingStyle.fill;
       canvas.drawPath(path, fill);
       canvas.drawPath(path, rim);
+      canvas.drawCircle(Offset(-p.w * 0.12, -p.h * 0.25), p.w * 0.12, shine);
       canvas.restore();
     }
   }

@@ -4,3 +4,4 @@ library;
 
 export 'src/scratch_overlay.dart';
 export 'src/scratch_to_win.dart';
+export 'src/scratch_debris_layer.dart';
